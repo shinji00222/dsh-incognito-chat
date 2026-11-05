@@ -1,6 +1,6 @@
 {
   "name": "dsh-incognito-chat",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-preview.1",
   "private": true,
   "description": "DeepSeek Harness 无痕对话：在新建对话页「标准模式」旁打开无痕，整段对话只在内存里，不写会话文件、不进历史列表。",
   "type": "module",
@@ -16,6 +16,7 @@
     "src",
     "cordis.patch.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "dsh": {
@@ -40,5 +41,10 @@
     "incognito",
     "privacy",
     "无痕"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shinji00222/dsh-incognito-chat.git"
+  },
+  "homepage": "https://github.com/shinji00222/dsh-incognito-chat#readme"
 }

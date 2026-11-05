@@ -14,7 +14,7 @@
 
 ```sh
 npm pack
-dsh plugin --profile web add ./dsh-incognito-chat-0.1.0-dev.0.tgz
+dsh plugin --profile web add ./dsh-incognito-chat-0.1.0-preview.1.tgz
 ```
 
 需要 DSH 0.2.1 左右的版本。插件启动时会自检，内部接口对不上就把开关变灰，不会假装在无痕。
