@@ -3,7 +3,8 @@
 // 为什么要挂进工作区：DSH 前端靠「工作区包含哪些会话」来决定当前会话属于哪个工作区；
 // 不挂进去，输入框会因为「没有选择工作区」被禁用，根本发不了消息（实测踩过）。
 // 代价：官方会把会话 id 写进 ~/.dsh/storages/workspace.json（只有 id，没有任何内容）。
-// 所以：丢弃无痕会话时立刻移除，插件启动时再扫一遍残留（比如 DSH 崩溃后）。
+// 用户还可能对无痕会话点「归档」「置顶」，id 会进 archivedSessionIds / pinnedSessionIds。
+// 所以：删除无痕会话时立刻移除，插件启动时再扫一遍残留（比如 DSH 崩溃后）。
 
 import { isIncognito } from './ids.js'
 
@@ -18,20 +19,37 @@ function rawSessionIds(workspace) {
   return Array.isArray(ids) ? ids : []
 }
 
+/** @param {unknown} value @returns {string[]} */
+const asList = (value) => (Array.isArray(value) ? value : [])
+
 /**
- * 把无痕 id 从工作区记录里移除。
+ * 把无痕 id 从工作区记录（成员、归档、置顶）里移除。
  * @param {any} registry ctx.workspaceRegistry
  * @param {(id: string) => boolean} [which] 只移除满足条件的 id，默认全部无痕 id
- * @returns {Promise<string[]>} 移除了哪些 id
+ * @returns {Promise<string[]>} 移除了哪些 id（同一个 id 可能出现多次）
  */
 export async function detachIncognito(registry, which = isIncognito) {
   const removed = []
+  const pick = (/** @type {string} */ id) => isIncognito(id) && which(id)
+
   const workspaces = typeof registry?.list === 'function' ? registry.list() : []
   for (const workspace of workspaces) {
     if (typeof workspace?.detachSession !== 'function') continue
-    for (const id of rawSessionIds(workspace)) {
-      if (!isIncognito(id) || !which(id)) continue
+    for (const id of rawSessionIds(workspace).filter(pick)) {
       await workspace.detachSession(id)
+      removed.push(id)
+    }
+  }
+
+  if (typeof registry?.unarchiveSession === 'function') {
+    for (const id of asList(registry.archivedSessionIds).filter(pick)) {
+      await registry.unarchiveSession(id)
+      removed.push(id)
+    }
+  }
+  if (typeof registry?.unpinSession === 'function') {
+    for (const id of asList(registry.pinnedSessionIds).filter(pick)) {
+      await registry.unpinSession(id)
       removed.push(id)
     }
   }

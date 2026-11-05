@@ -23,7 +23,15 @@
     '.dsh-incog-toggle:hover{background:var(--dsw-alias-interactive-bg-hover,#8882);color:var(--dsw-alias-label-primary,#eee)}',
     '.dsh-incog-toggle[aria-pressed=true]{background:#7c5cff26;border-color:#7c5cff99;color:#b9a8ff}',
     '.dsh-incog-toggle:disabled{opacity:.45;cursor:not-allowed}',
-    '.dsh-incog-badge{display:inline-flex;align-items:center;gap:4px;padding:0 8px;height:22px;border-radius:11px;',
+    '.dsh-incog-mark{display:inline-flex;align-items:center;color:#b9a8ff}',
+    '.dsh-incog-delete,.dsh-incog-row-delete{display:inline-flex;align-items:center;justify-content:center;border:none;',
+    'background:transparent;color:inherit;cursor:pointer;padding:2px;border-radius:6px;opacity:.75}',
+    '.dsh-incog-delete:hover,.dsh-incog-row-delete:hover{opacity:1;background:#7c5cff33}',
+    '.dsh-incog-row-delete{width:24px;height:24px;color:var(--dsw-alias-label-secondary,#aaa)}',
+    '.dsh-incog-menu-delete{display:flex;align-items:center;gap:8px;width:100%;border:none;background:transparent;',
+    'color:#ff7b7b;font-size:13px;padding:6px 10px;border-radius:6px;cursor:pointer;text-align:left}',
+    '.dsh-incog-menu-delete:hover{background:var(--dsw-alias-interactive-bg-hover,#8882)}',
+    '.dsh-incog-badge{display:inline-flex;align-items:center;gap:4px;padding:0 4px 0 8px;height:22px;border-radius:11px;',
     'background:#7c5cff26;color:#b9a8ff;font-size:12px;white-space:nowrap}',
   ].join('')
 
@@ -46,6 +54,10 @@
         return h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, 'aria-hidden': true },
           h('circle', { cx: 6, cy: 15, r: 4 }), h('circle', { cx: 18, cy: 15, r: 4 }),
           h('path', { d: 'M10 15h4M2 15l2-8h4M22 15l-2-8h-4' }))
+      }
+      function Trash() {
+        return h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, 'aria-hidden': true },
+          h('path', { d: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6' }))
       }
 
       return {
@@ -154,9 +166,18 @@
             ctx.uiWorkspace.openSession(created)
           }
 
-          function leaveIncognito(sessionId) {
-            ctx.uiWorkspace.startSession(workspaceIdOf(sessionId))
-            rpc('discard', { sessionId: sessionId }).catch(function () {}).then(function () { forgetSession(sessionId) })
+          /**
+           * 删除一个无痕对话：正在看它就先切回普通新对话，再让 host 删掉（停回合、释放内存、清工作区记录），
+           * 最后清浏览器里的记录。切换对话不会触发删除，只有用户点删除、或退出 DSH 才会没。
+           */
+          function deleteIncognito(sessionId, ask) {
+            if (!isIncognito(sessionId)) return Promise.resolve()
+            if (ask && !window.confirm('删除这段无痕对话？删除后无法恢复。')) return Promise.resolve()
+            var current = ctx.uiWorkspace.mainReference && ctx.uiWorkspace.mainReference.sessionId
+            if (current === sessionId) ctx.uiWorkspace.startSession(workspaceIdOf(sessionId))
+            return rpc('discard', { sessionId: sessionId })
+              .catch(function (e) { console.warn('[' + PLUGIN + '] delete failed:', e) })
+              .then(function () { forgetSession(sessionId) })
           }
 
           // ── 开关：新建对话页「标准模式」右边 ───────────────────────────
@@ -168,7 +189,7 @@
             var on = isIncognito(sessionId)
             var disabled = busy[0] || (!on && !s.ready)
             var title = error[0] || (!on && !s.ready ? s.reason
-              : on ? '关闭无痕，回到普通对话' : '无痕对话：不保存记录，不进历史列表，关闭即消失')
+              : on ? '关闭无痕，回到普通对话' : '无痕对话：不写盘、不进历史，删除或退出 DSH 后消失')
             return h('button', {
               type: 'button',
               className: 'dsh-incog-toggle',
@@ -178,24 +199,69 @@
               onClick: function () {
                 busy[1](true)
                 error[1]('')
-                var job = on ? Promise.resolve(leaveIncognito(sessionId)) : enterIncognito(sessionId)
+                // 新建页上的无痕会话还没发过消息，关掉开关直接删，不用确认
+                var job = on ? deleteIncognito(sessionId, false) : enterIncognito(sessionId)
                 job.catch(function (e) { error[1](String(e && e.message || e)) })
                   .finally(function () { busy[1](false) })
               },
             }, h(Glasses), on ? '无痕中' : '无痕')
           }
 
-          // ── 会话顶部标识；离开无痕会话时丢弃 ──────────────────────────
+          // ── 会话顶部：无痕标识 + 删除按钮 ─────────────────────────────
           function IncognitoBadge(props) {
             var sessionId = props.sessionId
-            var on = isIncognito(sessionId)
-            React.useEffect(function () {
-              if (!on) return
-              return function () { rpc('discard', { sessionId: sessionId }).catch(function () {}).then(function () { forgetSession(sessionId) }) }
-            }, [sessionId, on])
-            if (!on) return null
-            return h('span', { className: 'dsh-incog-badge', title: '这段对话不会保存，离开后消失' }, h(Glasses), '无痕对话')
+            if (!isIncognito(sessionId)) return null
+            return h('span', { className: 'dsh-incog-badge', title: '这段对话不写盘、不进历史；删除或退出 DSH 后消失' },
+              h(Glasses), '无痕对话',
+              h('button', {
+                type: 'button',
+                className: 'dsh-incog-delete',
+                title: '删除这段无痕对话',
+                'aria-label': '删除这段无痕对话',
+                onClick: function () { deleteIncognito(sessionId, true) },
+              }, h(Trash)))
           }
+
+          // ── 侧栏：行首显示无痕图标 ─────────────────────────────────────
+          function SidebarMark(props) {
+            if (!isIncognito(props.sessionId)) return null
+            return h('span', { className: 'dsh-incog-mark', title: '无痕对话', 'aria-label': '无痕对话' }, h(Glasses))
+          }
+
+          // ── 侧栏：悬停时的删除按钮 ─────────────────────────────────────
+          function SidebarDelete(props) {
+            if (!isIncognito(props.sessionId)) return null
+            return h('button', {
+              type: 'button',
+              className: 'dsh-incog-row-delete',
+              title: '删除无痕对话',
+              'aria-label': '删除无痕对话',
+              onClick: function (e) { e.stopPropagation(); deleteIncognito(props.sessionId, true) },
+            }, h(Trash))
+          }
+
+          // ── 侧栏：「…」菜单里的删除项 ─────────────────────────────────
+          function SidebarMenuDelete(props) {
+            if (!isIncognito(props.sessionId)) return null
+            var close = props.useMenuOpenState ? props.useMenuOpenState()[1] : function () {}
+            return h('button', {
+              type: 'button',
+              role: 'menuitem',
+              className: 'dsh-incog-menu-delete',
+              onClick: function () { close(false); deleteIncognito(props.sessionId, true) },
+            }, h(Trash), '删除无痕对话')
+          }
+
+          // 侧栏插槽由 workspace 插件声明，slots.inject 会等它声明好再注册
+          ctx.slots.inject('sidebar.session.row.leading', function* () {
+            yield ctx.slots.register({ name: 'sidebar.session.row.leading', id: PLUGIN + '-mark', order: 10 }, SidebarMark)
+          })
+          ctx.slots.inject('sidebar.workspaces.session.row.action', function* () {
+            yield ctx.slots.register({ name: 'sidebar.workspaces.session.row.action', id: PLUGIN + '-delete', order: 50 }, SidebarDelete)
+          })
+          ctx.slots.inject('sidebar.workspaces.session.menu.item', function* () {
+            yield ctx.slots.register({ name: 'sidebar.workspaces.session.menu.item', id: PLUGIN + '-delete', order: 390 }, SidebarMenuDelete)
+          })
 
           // 插槽是 conversation 插件声明的：要等它加载后再注册，否则报 "slot is not declared"
           ctx.inject(['conversation'], function (scope) {

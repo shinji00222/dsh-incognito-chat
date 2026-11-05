@@ -6,7 +6,7 @@
 
 - 会话内容一直放在内存里，**不会写进 `~/.dsh/sessions`**（是根本不写，不是写完再删）
 - 不进历史列表，标题、用量这些缓存也不写
-- 离开这个对话就没了；DSH 退出也一样
+- 侧栏里会标出无痕对话；不想要了就手动删除，退出 DSH 也会直接消失
 
 ## 安装
 
@@ -14,7 +14,7 @@
 
 ```sh
 npm pack
-dsh plugin --profile web add ./dsh-incognito-chat-0.1.0-preview.1.tgz
+dsh plugin --profile web add ./dsh-incognito-chat-0.1.0-preview.2.tgz
 ```
 
 需要 DSH 0.2.1 左右的版本。插件启动时会自检，内部接口对不上就把开关变灰，不会假装在无痕。

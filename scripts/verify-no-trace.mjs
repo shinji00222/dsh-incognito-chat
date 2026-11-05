@@ -6,15 +6,16 @@
 //   node scripts/verify-no-trace.mjs check INCOG-PROBE-xxxx   # 2. 对比 + 全盘搜探针
 //
 // 判定：
-//   - sessions/ 下不能有新文件
-//   - 任何文件都不能包含探针文字
+//   - sessions/ 下不能出现无痕 id 的目录
+//   - 任何文件（包括解压后的 .zstd 会话日志）都不能包含探针文字
 //   - workspace.json 里不能残留 session-incognito- id
-// 注意：会话日志是 zstd 压缩的，搜文字搜不到压缩内容 —— 所以「没有新会话文件」才是主判据，
-// 搜探针只是补充（覆盖 storages/ 里的明文 JSON）。
+// 新出现的普通会话文件只提示不判失败：DSH 点「新建会话」会给空白普通会话写一个只有表头的日志。
+// 会话日志是 zstd 压缩的，用 Node 自带的 zlib.zstdDecompressSync 解开再搜（Node 22.15+）。
 
 import { readdirSync, readFileSync, statSync, writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { zstdDecompressSync } from 'node:zlib'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const home = process.env.DSH_HOME ?? path.join(root, 'work/isolated-dsh')
@@ -33,6 +34,21 @@ function listFiles(dir, base = dir, out = {}) {
   return out
 }
 
+/**
+ * DSH 的会话日志是多个 zstd 帧首尾相接（每批事件一帧）。
+ * zlib.zstdDecompressSync 只解第一帧（实测：10 帧的文件只解出表头）——直接用会漏检！
+ * 所以在每个帧魔数（28 B5 2F FD）处各解一次，解不开的（数据里碰巧出现的魔数）跳过。
+ * @param {Buffer} buf
+ */
+export function decodeAllFrames(buf) {
+  const parts = []
+  for (let i = buf.indexOf(ZSTD_MAGIC); i !== -1; i = buf.indexOf(ZSTD_MAGIC, i + 1)) {
+    try { parts.push(zstdDecompressSync(buf.subarray(i))) } catch { /* 不是真的帧头 */ }
+  }
+  return Buffer.concat(parts)
+}
+const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
+
 const [command, probe] = process.argv.slice(2)
 
 if (command === 'snapshot') {
@@ -45,12 +61,16 @@ if (command === 'snapshot') {
   const added = Object.keys(after).filter((f) => !(f in before))
   const problems = []
 
+  const incognitoDirs = Object.keys(after).filter((f) => f.startsWith('sessions/') && f.includes('session-incognito-'))
+  if (incognitoDirs.length) problems.push(`incognito session files on disk: ${incognitoDirs.join(', ')}`)
   const newSessionFiles = added.filter((f) => f.startsWith('sessions/'))
-  if (newSessionFiles.length) problems.push(`new session files: ${newSessionFiles.join(', ')}`)
+  if (newSessionFiles.length) console.log(`note: new ordinary session files (checked for probe below): ${newSessionFiles.join(', ')}`)
 
   if (probe) {
     for (const file of Object.keys(after)) {
-      if (readFileSync(path.join(home, file)).includes(probe)) problems.push(`probe text found in ${file}`)
+      let bytes = readFileSync(path.join(home, file))
+      if (file.endsWith('.zstd')) bytes = decodeAllFrames(bytes)
+      if (bytes.includes(probe)) problems.push(`probe text found in ${file}`)
     }
   }
 

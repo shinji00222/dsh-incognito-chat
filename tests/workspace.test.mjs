@@ -31,6 +31,20 @@ test('可以只移除指定的那一个', async () => {
   assert.deepEqual(ws.record.sessionIds, [B])
 })
 
+test('归档、置顶列表里的无痕 id 也会移除', async () => {
+  const registry = {
+    archivedSessionIds: [A, NORMAL],
+    pinnedSessionIds: [B],
+    list: () => [],
+    async unarchiveSession(id) { this.archivedSessionIds = this.archivedSessionIds.filter((x) => x !== id) },
+    async unpinSession(id) { this.pinnedSessionIds = this.pinnedSessionIds.filter((x) => x !== id) },
+  }
+  await detachIncognito(registry)
+
+  assert.deepEqual(registry.archivedSessionIds, [NORMAL])
+  assert.deepEqual(registry.pinnedSessionIds, [])
+})
+
 test('registry 形状不对时什么也不做，不报错', async () => {
   assert.deepEqual(await detachIncognito(undefined), [])
   assert.deepEqual(await detachIncognito({ list: () => [{}] }), [])

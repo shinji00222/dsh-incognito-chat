@@ -13,6 +13,7 @@ import { IncognitoStore, isWrapped, wrapPersistence } from './persistence.js'
 import { patchProjectionCache } from './projcache.js'
 import { unwrapService } from './unwrap.js'
 import { detachIncognito } from './workspace.js'
+import { releaseSession } from './release.js'
 
 export const name = 'dsh-incognito-chat'
 
@@ -86,19 +87,39 @@ export function apply(ctx) {
     errors: [...state.errors],
   })
 
-  /** 丢弃一个无痕会话：停掉它正在跑的回合、后台任务、子 agent，清空草稿本。 */
+  /**
+   * 删除一个无痕会话（用户手动点删除时调用）：
+   *   1. 停掉它正在跑的回合、后台任务、子 agent
+   *   2. 销毁 agent 的 scope —— 官方 agent-loop 会跟着做完整 teardown：
+   *      取消回合、关句柄、把 agent 和会话从内存注册表里摘掉
+   *   3. 清空草稿本、从工作区记录里移除 id
+   *   4. 检查会话是否真的从 DSH 内存里消失了（released），如实返回
+   */
   async function discard(/** @type {unknown} */ sessionId) {
     if (!isIncognito(sessionId)) return { discarded: false, reason: 'not-incognito' }
+    const id = /** @type {string} */ (sessionId)
     try {
-      await ctx.parallel('workspace/session-stop', { sessionId })
+      await ctx.parallel('workspace/session-stop', { sessionId: id })
     } catch (error) {
-      warn(`stop ${String(sessionId)} failed: ${String(error)}`)
+      warn(`stop ${id} failed: ${String(error)}`)
     }
-    const handle = store.get(/** @type {string} */ (sessionId))
+
+    const agents = ctx.get('agents')
+    const sessions = ctx.get('sessions')
+    let releasedVia = 'not-found'
+    try {
+      releasedVia = await releaseSession(ctx.registry ?? ctx.root?.registry, id)
+    } catch (error) {
+      warn(`release ${id} failed: ${String(error)}`)
+    }
+
+    const handle = store.get(id)
     await handle?.close()
     const registry = ctx.get('workspaceRegistry')
-    const detached = registry ? await detachIncognito(registry, (id) => id === sessionId) : []
-    return { discarded: handle !== undefined, detached: detached.length }
+    const detached = registry ? await detachIncognito(registry, (x) => x === id) : []
+    const released = agents?.get?.(id) === undefined && sessions?.get?.(id) === undefined
+    if (!released) warn(`${id} is still held in DSH memory after delete; it will be gone when DSH exits`)
+    return { discarded: true, released, releasedVia, detached: detached.length }
   }
 
   // ── 4. 启动时清掉工作区里残留的无痕 id（DSH 崩溃、强退后留下的）────
