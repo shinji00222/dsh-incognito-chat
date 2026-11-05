@@ -14,7 +14,7 @@
 
 ```sh
 npm pack
-dsh plugin --profile web add ./dsh-incognito-chat-0.1.0-preview.2.tgz
+dsh plugin --profile web add ./dsh-incognito-chat-0.1.0-preview.3.tgz
 ```
 
 需要 DSH 0.2.1 左右的版本。插件启动时会自检，内部接口对不上就把开关变灰，不会假装在无痕。
@@ -25,6 +25,7 @@ dsh plugin --profile web add ./dsh-incognito-chat-0.1.0-preview.2.tgz
 - Agent 用工具改过的文件不会撤销
 - 对话开着的时候，`workspace.json` 里会临时记下这个会话的 id（只有 id，没有内容），离开时删掉；DSH 崩了的话，下次启动时清掉
 - 粘贴的图片和附件目前还会存到 `~/.dsh/attachments`，下个版本处理
+- 旧版本曾将未发送的无痕草稿写入浏览器存储，升级不会擦除底层日志中的旧数据
 
 ## 怎么验证
 

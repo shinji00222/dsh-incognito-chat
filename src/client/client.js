@@ -16,6 +16,61 @@
     return typeof id === 'string' && ID_RE.test(id)
   }
 
+  // 拦在浏览器持久化之前；无痕草稿只存在当前页面的内存中。
+  function installDraftGuard() {
+    var storage = window.localStorage
+    var proto = Object.getPrototypeOf(storage)
+    var get = proto.getItem, set = proto.setItem, remove = proto.removeItem
+    var memory = new Map(), closed = new Set()
+    var prefix = 'dsh.conversation.'
+    function session(key) {
+      key = String(key)
+      var id = key.slice(prefix.length)
+      return key.startsWith(prefix) && isIncognito(id) ? id : null
+    }
+    function read(key) {
+      var id = this === storage && session(key)
+      return id ? (memory.has(id) ? memory.get(id) : null) : get.call(this, key)
+    }
+    function write(key, value) {
+      var id = this === storage && session(key)
+      if (!id) return set.call(this, key, value)
+      if (!closed.has(id)) memory.set(id, String(value))
+    }
+    function erase(key) {
+      var id = this === storage && session(key)
+      if (id) memory.delete(id)
+      return remove.call(this, key)
+    }
+    try {
+      proto.getItem = read; proto.setItem = write; proto.removeItem = erase
+      if (storage.getItem !== read || storage.setItem !== write || storage.removeItem !== erase) throw Error('storage interception unavailable')
+      return { ready: function () { return storage.getItem === read && storage.setItem === write && storage.removeItem === erase },
+        close: function (id) { closed.add(id); memory.delete(id) } }
+    } catch (e) {
+      if (proto.getItem === read) proto.getItem = get
+      if (proto.setItem === write) proto.setItem = set
+      if (proto.removeItem === erase) proto.removeItem = remove
+      return { ready: function () { return false }, close: function () {} }
+    }
+  }
+
+  async function switchAwayFrom(ctx, sessionId, workspaceId) {
+    var list = ctx.sessions.list.getSnapshot()
+    var current = list && list.byId && list.byId[sessionId]
+    if (!current || !current.retainedBy) throw new Error('无法确认当前会话，未删除无痕会话')
+    if (!(current.retainedBy.mainView > 0)) return
+    if (!workspaceId) throw new Error('找不到会话工作区，未删除无痕会话')
+    var result = await ctx.sessions.create({ workspaceId: workspaceId })
+    var next = typeof result === 'string' ? result : result && (result.sessionId || (result.value && result.value.sessionId))
+    if (!next || isIncognito(next)) throw new Error('普通会话创建失败，未删除无痕会话')
+    ctx.uiWorkspace.openSession(next)
+    var after = ctx.sessions.list.getSnapshot()
+    if (!after.byId[next] || !after.byId[next].retainedBy || !after.byId[next].retainedBy.mainView) {
+      throw new Error('普通会话未打开，未删除无痕会话')
+    }
+  }
+
   var STYLE = [
     '.dsh-incog-toggle{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;',
     'border:.5px solid var(--dsw-alias-border-l3,#8884);background:transparent;color:var(--dsw-alias-label-secondary,#aaa);',
@@ -75,6 +130,7 @@
 
       function applyIncognito(ctx) {
           injectStyle()
+          var draftGuard = installDraftGuard()
 
           function rpc(method, payload) {
             return fetch(API_PREFIX + '/' + method, {
@@ -125,7 +181,7 @@
             // 启动时清掉已经不存在的无痕会话留下的 key（上次没正常关闭的）
             var live = s.liveIds || []
             cleanBrowserTraces(function (id) { return live.indexOf(id) >= 0 })
-            setStatus({ ready: !!s.ready, checked: true, reason: s.ready ? '' : '当前 DSH 版本不支持无痕：' + (s.errors || []).join('；') })
+            setStatus({ ready: !!s.ready && draftGuard.ready(), checked: true, reason: !draftGuard.ready() ? '无法保护无痕草稿' : s.ready ? '' : '当前 DSH 版本不支持无痕：' + (s.errors || []).join('；') })
           }, function (e) {
             setStatus({ ready: false, checked: true, reason: '无痕插件的 host 端没有加载：' + e.message })
           })
@@ -157,6 +213,7 @@
           }
 
           async function enterIncognito(fromSessionId) {
+            if (!draftGuard.ready()) throw new Error('无法保护无痕草稿')
             var workspaceId = workspaceIdOf(fromSessionId)
             if (!workspaceId) throw new Error('找不到当前会话所在的工作区')
             var id = PREFIX + crypto.randomUUID()
@@ -170,11 +227,11 @@
            * 删除一个无痕对话：正在看它就先切回普通新对话，再让 host 删掉（停回合、释放内存、清工作区记录），
            * 最后清浏览器里的记录。切换对话不会触发删除，只有用户点删除、或退出 DSH 才会没。
            */
-          function deleteIncognito(sessionId, ask) {
+          async function deleteIncognito(sessionId, ask) {
             if (!isIncognito(sessionId)) return Promise.resolve()
             if (ask && !window.confirm('删除这段无痕对话？删除后无法恢复。')) return Promise.resolve()
-            var current = ctx.uiWorkspace.mainReference && ctx.uiWorkspace.mainReference.sessionId
-            if (current === sessionId) ctx.uiWorkspace.startSession(workspaceIdOf(sessionId))
+            await switchAwayFrom(ctx, sessionId, workspaceIdOf(sessionId))
+            draftGuard.close(sessionId)
             return rpc('discard', { sessionId: sessionId })
               .catch(function (e) { console.warn('[' + PLUGIN + '] delete failed:', e) })
               .then(function () { forgetSession(sessionId) })
