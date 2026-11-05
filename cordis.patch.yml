@@ -1,0 +1,4 @@
+# dsh-incognito-chat bundle patch：挂载 host 端插件。
+- insert:
+    - id: incognito-chat
+      name: 'dsh-incognito-chat'

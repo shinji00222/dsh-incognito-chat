@@ -1,0 +1,44 @@
+{
+  "name": "dsh-incognito-chat",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "DeepSeek Harness 无痕对话：在新建对话页「标准模式」旁打开无痕，整段对话只在内存里，不写会话文件、不进历史列表。",
+  "type": "module",
+  "license": "MIT",
+  "author": "shinji00222",
+  "main": "./src/host/plugin.js",
+  "exports": {
+    ".": "./src/host/plugin.js",
+    "./client": "./src/client/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "pack:local": "npm pack --pack-destination artifacts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "incognito",
+    "privacy",
+    "无痕"
+  ]
+}
