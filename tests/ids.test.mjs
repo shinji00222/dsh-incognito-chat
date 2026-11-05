@@ -15,13 +15,36 @@ test('示范：完整的无痕 id 能认出来', () => {
 })
 
 // TODO(shin)：官方普通 id（session-<uuid>）不能被认成无痕
-test.todo('普通会话 id 不是无痕')
+test('普通会话 id 不是无痕', () => {
+  const id='session-'+UUID
+  const result = isIncognito(id)
+  assert.equal(result, false)
+  console.log(result)
+})
 
 // TODO(shin)：大写 uuid、少一位、多一段后缀，都应该是 false。想想为什么要这么严格？
-test.todo('格式不完整或大写的 id 不是无痕')
+test('格式不完整或大写的 id 不是无痕',()=>{
+  const id=INCOGNITO_PREFIX+UUID+'-extra'
+  const result = isIncognito(id)
+  assert.equal(result, false)
+
+  const shortId = INCOGNITO_PREFIX + UUID.slice(0, -1)
+  const shortResult = isIncognito(shortId)
+  assert.equal(shortResult, false)
+
+  const upperId = INCOGNITO_PREFIX + 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA'
+  assert.equal(isIncognito(upperId), false)
+})
 
 // TODO(shin)：undefined、数字、对象传进来不能报错，只返回 false
-test.todo('非字符串输入返回 false')
+test('非字符串输入返回 false', () => {
+  assert.equal(isIncognito(undefined), false)
+  assert.equal(isIncognito(123), false)
+  assert.equal(isIncognito({}), false)
+})
 
 // TODO(shin)：newIncognitoId 可以注入固定 uuid，用它写一个「生成的 id 能被 isIncognito 认出」的测试
-test.todo('newIncognitoId 生成的 id 能被认出')
+test('newIncognitoId 生成的 id 能被认出', () => {
+  const id = newIncognitoId(() => UUID)
+  assert.equal(isIncognito(id), true)
+})
