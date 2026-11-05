@@ -34,6 +34,9 @@ test('格式不完整或大写的 id 不是无痕',()=>{
 
   const upperId = INCOGNITO_PREFIX + 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA'
   assert.equal(isIncognito(upperId), false)
+
+  const extraPrefixId = 'abc-' + INCOGNITO_PREFIX + UUID
+  assert.equal(isIncognito(extraPrefixId), false)
 })
 
 // TODO(shin)：undefined、数字、对象传进来不能报错，只返回 false
