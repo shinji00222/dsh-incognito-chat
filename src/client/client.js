@@ -16,6 +16,66 @@
     return typeof id === 'string' && ID_RE.test(id)
   }
 
+  // Desktop's native picker normally turns non-image files into @path
+  // references. A new File keeps the bytes but carries no native host path,
+  // so DSH uses its existing upload pipeline for this incognito session.
+  function installDesktopFileGuard(ctx) {
+    var bridge = window.__DSH_HOST_PATHS__
+    if (!bridge) return { ready: true, dispose: function () {} }
+    if (typeof bridge.pathFor !== 'function' || typeof File !== 'function' || typeof DataTransfer !== 'function') {
+      return { ready: false, dispose: function () {} }
+    }
+    function owner() {
+      var snapshot = ctx.sessions.list.getSnapshot()
+      var byId = snapshot && snapshot.byId
+      if (!byId) return null
+      var ids = Object.keys(byId).filter(function (id) { return byId[id] && byId[id].retainedBy && byId[id].retainedBy.mainView > 0 })
+      return ids.length === 1 ? ids[0] : null
+    }
+    function reject(event, message) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (event.target && event.target.type === 'file') event.target.value = ''
+      window.alert(message)
+    }
+    function copyFiles(event, property) {
+      var source = property === 'files' ? event.target : event[property]
+      var files = source && source.files
+      if (!files || !files.length) return
+      var id = owner()
+      if (!id) return reject(event, '无法确认附件所属对话，已取消添加。')
+      if (!isIncognito(id)) return
+      try {
+        if (source.items && Array.from(source.items).some(function (item) {
+          var entry = item.webkitGetAsEntry && item.webkitGetAsEntry()
+          return entry && entry.isDirectory
+        })) throw new Error('无痕对话暂不支持添加文件夹')
+        var copied = new DataTransfer()
+        Array.from(files).forEach(function (file) {
+          var clone = new File([file], file.name, { type: file.type, lastModified: file.lastModified })
+          if (bridge.pathFor(clone)) throw new Error('无法隔离桌面文件路径')
+          copied.items.add(clone)
+        })
+        if (property === 'files') event.target.files = copied.files
+        else Object.defineProperty(event, property, { value: copied, configurable: true })
+        if ((property === 'files' ? event.target.files : event[property].files).length !== files.length) throw new Error('文件转换不完整')
+      } catch (error) {
+        reject(event, '无痕附件未添加：' + String(error && error.message || error))
+      }
+    }
+    function change(event) { if (event.target && event.target.matches && event.target.matches('input[type="file"]')) copyFiles(event, 'files') }
+    function drop(event) { copyFiles(event, 'dataTransfer') }
+    function paste(event) { copyFiles(event, 'clipboardData') }
+    document.addEventListener('change', change, true)
+    document.addEventListener('drop', drop, true)
+    document.addEventListener('paste', paste, true)
+    return { ready: true, dispose: function () {
+      document.removeEventListener('change', change, true)
+      document.removeEventListener('drop', drop, true)
+      document.removeEventListener('paste', paste, true)
+    } }
+  }
+
   // 拦在浏览器持久化之前；无痕草稿只存在当前页面的内存中。
   function installDraftGuard() {
     var storage = window.localStorage
@@ -131,6 +191,8 @@
       function applyIncognito(ctx) {
           injectStyle()
           var draftGuard = installDraftGuard()
+          var fileGuard = installDesktopFileGuard(ctx)
+          ctx.effect(function () { return fileGuard.dispose }, 'incognito-chat.desktop-file-guard')
 
           function rpc(method, payload) {
             return fetch(API_PREFIX + '/' + method, {
@@ -181,7 +243,7 @@
             // 启动时清掉已经不存在的无痕会话留下的 key（上次没正常关闭的）
             var live = s.liveIds || []
             cleanBrowserTraces(function (id) { return live.indexOf(id) >= 0 })
-            setStatus({ ready: !!s.ready && draftGuard.ready(), checked: true, reason: !draftGuard.ready() ? '无法保护无痕草稿' : s.ready ? '' : '当前 DSH 版本不支持无痕：' + (s.errors || []).join('；') })
+            setStatus({ ready: !!s.ready && draftGuard.ready() && fileGuard.ready, attachments: s.attachments, checked: true, reason: !draftGuard.ready() ? '无法保护无痕草稿' : !fileGuard.ready ? '无法保护桌面文件' : s.ready ? '' : '当前 DSH 版本不支持无痕：' + (s.errors || []).join('；') })
           }, function (e) {
             setStatus({ ready: false, checked: true, reason: '无痕插件的 host 端没有加载：' + e.message })
           })
@@ -232,9 +294,13 @@
             if (ask && !window.confirm('删除这段无痕对话？删除后无法恢复。')) return Promise.resolve()
             await switchAwayFrom(ctx, sessionId, workspaceIdOf(sessionId))
             draftGuard.close(sessionId)
-            return rpc('discard', { sessionId: sessionId })
-              .catch(function (e) { console.warn('[' + PLUGIN + '] delete failed:', e) })
-              .then(function () { forgetSession(sessionId) })
+            var result = await rpc('discard', { sessionId: sessionId })
+            if (!result || !result.discarded || !result.released) throw new Error((result && result.reason) || '无痕对话未完全释放，附件可能尚未清理')
+            forgetSession(sessionId)
+          }
+
+          function reportDeleteError(error) {
+            window.alert('删除无痕对话未完成：' + String(error && error.message || error))
           }
 
           // ── 开关：新建对话页「标准模式」右边 ───────────────────────────
@@ -246,7 +312,7 @@
             var on = isIncognito(sessionId)
             var disabled = busy[0] || (!on && !s.ready)
             var title = error[0] || (!on && !s.ready ? s.reason
-              : on ? '关闭无痕，回到普通对话' : '无痕对话：不写盘、不进历史，删除或退出 DSH 后消失')
+              : on ? '关闭无痕，回到普通对话' : s.attachments === 'ok' ? '对话保存在内存；附件暂存磁盘，删除时清理' : '对话保存在内存；附件未受保护，可能写入普通附件目录')
             return h('button', {
               type: 'button',
               className: 'dsh-incog-toggle',
@@ -267,15 +333,16 @@
           // ── 会话顶部：无痕标识 + 删除按钮 ─────────────────────────────
           function IncognitoBadge(props) {
             var sessionId = props.sessionId
+            var s = useStatus()
             if (!isIncognito(sessionId)) return null
-            return h('span', { className: 'dsh-incog-badge', title: '这段对话不写盘、不进历史；删除或退出 DSH 后消失' },
+            return h('span', { className: 'dsh-incog-badge', title: s.attachments === 'ok' ? '对话保存在内存；附件暂存磁盘，删除时清理' : '对话保存在内存；附件未受保护，可能写入普通附件目录' },
               h(Glasses), '无痕对话',
               h('button', {
                 type: 'button',
                 className: 'dsh-incog-delete',
                 title: '删除这段无痕对话',
                 'aria-label': '删除这段无痕对话',
-                onClick: function () { deleteIncognito(sessionId, true) },
+                onClick: function () { deleteIncognito(sessionId, true).catch(reportDeleteError) },
               }, h(Trash)))
           }
 
@@ -293,7 +360,7 @@
               className: 'dsh-incog-row-delete',
               title: '删除无痕对话',
               'aria-label': '删除无痕对话',
-              onClick: function (e) { e.stopPropagation(); deleteIncognito(props.sessionId, true) },
+              onClick: function (e) { e.stopPropagation(); deleteIncognito(props.sessionId, true).catch(reportDeleteError) },
             }, h(Trash))
           }
 
@@ -305,7 +372,7 @@
               type: 'button',
               role: 'menuitem',
               className: 'dsh-incog-menu-delete',
-              onClick: function () { close(false); deleteIncognito(props.sessionId, true) },
+              onClick: function () { close(false); deleteIncognito(props.sessionId, true).catch(reportDeleteError) },
             }, h(Trash), '删除无痕对话')
           }
 

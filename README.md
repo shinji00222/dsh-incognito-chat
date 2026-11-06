@@ -14,7 +14,7 @@
 
 ```sh
 npm pack
-dsh plugin --profile web add ./dsh-incognito-chat-0.1.0-preview.3.tgz
+dsh plugin --profile desktop add ./dsh-incognito-chat-0.1.0-preview.10.tgz
 ```
 
 需要 DSH 0.2.1 左右的版本。插件启动时会自检，内部接口对不上就把开关变灰，不会假装在无痕。
@@ -24,7 +24,10 @@ dsh plugin --profile web add ./dsh-incognito-chat-0.1.0-preview.3.tgz
 - 消息还是会发给模型服务商，这是对话本身决定的
 - Agent 用工具改过的文件不会撤销
 - 对话开着的时候，`workspace.json` 里会临时记下这个会话的 id（只有 id，没有内容），离开时删掉；DSH 崩了的话，下次启动时清掉
-- 粘贴的图片和附件目前还会存到 `~/.dsh/attachments`，下个版本处理
+- 桌面附件保护仍在测试：附件使用期间会写入临时目录，删除不保证磁盘上的旧数据不可恢复；不要用于需要可靠安全擦除的内容
+- 手动输入 `@` 引用文件时，工具可能直接读取原文件，不会删除或保护那个原文件
+- 后台进程脱离工具生命周期或 DSH 异常退出后的边界尚未完全验证
+- 其他插件可能收集或发送会话内容；`session-log-deepseek` 的实际请求行为尚未验证
 - 旧版本曾将未发送的无痕草稿写入浏览器存储，升级不会擦除底层日志中的旧数据
 
 ## 怎么验证

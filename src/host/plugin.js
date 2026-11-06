@@ -14,6 +14,8 @@ import { patchProjectionCache } from './projcache.js'
 import { unwrapService } from './unwrap.js'
 import { detachIncognito } from './workspace.js'
 import { releaseSession } from './release.js'
+import { installExperimentalAttachments } from './attachment-runtime.js'
+import { waitForSessionJobs } from './attachment-jobs.js'
 
 export const name = 'dsh-incognito-chat'
 
@@ -32,6 +34,8 @@ export function apply(ctx) {
     state.errors.push(message)
     ctx.logger?.warn?.(`[incognito-chat] ${message}`)
   }
+  // Fail closed when the attachment routing cannot be installed.
+  const attachmentState = installExperimentalAttachments(ctx, warn, log)
 
   // ── 1. 持久化分流 ─────────────────────────────────────────────────────
   ctx.inject(['sessionPersistence'], (/** @type {any} */ child) => {
@@ -79,9 +83,10 @@ export function apply(ctx) {
   })
 
   const status = () => ({
-    ready: state.persistence === 'ok' && state.projectionCache !== 'failed',
+    ready: state.persistence === 'ok' && state.projectionCache !== 'failed' && attachmentState.status === 'ok',
     persistence: state.persistence,
     projectionCache: state.projectionCache,
+    attachments: attachmentState?.status ?? 'unprotected',
     liveSessions: store.size,
     liveIds: [...store.handles.keys()],
     errors: [...state.errors],
@@ -98,11 +103,16 @@ export function apply(ctx) {
   async function discard(/** @type {unknown} */ sessionId) {
     if (!isIncognito(sessionId)) return { discarded: false, reason: 'not-incognito' }
     const id = /** @type {string} */ (sessionId)
+    attachmentState?.jobs?.beginClose(id)
     try {
       await ctx.parallel('workspace/session-stop', { sessionId: id })
     } catch (error) {
       warn(`stop ${id} failed: ${String(error)}`)
+      if (attachmentState) throw new Error('无法停止会话任务，附件尚未删除')
     }
+
+    if (attachmentState?.pool) await waitForSessionJobs(ctx.get('jobs'), id)
+    if (attachmentState?.pool) await attachmentState.jobs.wait(id)
 
     const agents = ctx.get('agents')
     const sessions = ctx.get('sessions')
@@ -118,7 +128,11 @@ export function apply(ctx) {
     const registry = ctx.get('workspaceRegistry')
     const detached = registry ? await detachIncognito(registry, (x) => x === id) : []
     const released = agents?.get?.(id) === undefined && sessions?.get?.(id) === undefined
-    if (!released) warn(`${id} is still held in DSH memory after delete; it will be gone when DSH exits`)
+    if (!released) {
+      warn(`${id} is still held in DSH memory after delete; it will be gone when DSH exits`)
+      return { discarded: false, released, releasedVia, detached: detached.length, reason: '会话仍在运行，附件尚未清理；请退出 DSH 后重新启动' }
+    }
+    if (released && attachmentState?.pool) await attachmentState.pool.close(id)
     return { discarded: true, released, releasedVia, detached: detached.length }
   }
 
