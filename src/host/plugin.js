@@ -16,6 +16,7 @@ import { detachIncognito } from './workspace.js'
 import { releaseSession } from './release.js'
 import { installExperimentalAttachments } from './attachment-runtime.js'
 import { waitForSessionJobs } from './attachment-jobs.js'
+import { patchSessionLog } from './session-log.js'
 
 export const name = 'dsh-incognito-chat'
 
@@ -27,6 +28,7 @@ export function apply(ctx) {
   const state = {
     persistence: /** @type {'missing'|'ok'|'failed'} */ ('missing'),
     projectionCache: /** @type {'absent'|'ok'|'failed'} */ ('absent'),
+    sessionLog: /** @type {'absent'|'ok'|'failed'} */ ('absent'),
     errors: /** @type {string[]} */ ([]),
   }
   const log = (/** @type {string} */ message) => ctx.logger?.info?.(`[incognito-chat] ${message}`)
@@ -36,6 +38,17 @@ export function apply(ctx) {
   }
   // Fail closed when the attachment routing cannot be installed.
   const attachmentState = installExperimentalAttachments(ctx, warn, log)
+
+  ctx.inject(['deepseekLlmApiExtensions'], (child) => {
+    try {
+      const restore = patchSessionLog(unwrapService(child.deepseekLlmApiExtensions))
+      state.sessionLog = 'ok'
+      child.effect(() => () => { restore(); state.sessionLog = 'absent' }, 'incognito-chat.session-log')
+    } catch (error) {
+      state.sessionLog = 'failed'
+      warn(`cannot protect session log: ${String(error)}`)
+    }
+  })
 
   // ── 1. 持久化分流 ─────────────────────────────────────────────────────
   ctx.inject(['sessionPersistence'], (/** @type {any} */ child) => {
@@ -83,9 +96,10 @@ export function apply(ctx) {
   })
 
   const status = () => ({
-    ready: state.persistence === 'ok' && state.projectionCache !== 'failed' && attachmentState.status === 'ok',
+    ready: state.persistence === 'ok' && state.projectionCache !== 'failed' && state.sessionLog !== 'failed' && attachmentState.status === 'ok',
     persistence: state.persistence,
     projectionCache: state.projectionCache,
+    sessionLog: state.sessionLog,
     attachments: attachmentState?.status ?? 'unprotected',
     liveSessions: store.size,
     liveIds: [...store.handles.keys()],
