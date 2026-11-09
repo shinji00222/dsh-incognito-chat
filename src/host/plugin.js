@@ -17,6 +17,7 @@ import { releaseSession } from './release.js'
 import { installExperimentalAttachments } from './attachment-runtime.js'
 import { waitForSessionJobs } from './attachment-jobs.js'
 import { patchSessionLog } from './session-log.js'
+import { patchSubagentStart } from './subagent-guard.js'
 
 export const name = 'dsh-incognito-chat'
 
@@ -29,6 +30,7 @@ export function apply(ctx) {
     persistence: /** @type {'missing'|'ok'|'failed'} */ ('missing'),
     projectionCache: /** @type {'absent'|'ok'|'failed'} */ ('absent'),
     sessionLog: /** @type {'absent'|'ok'|'failed'} */ ('absent'),
+    subagentGuard: /** @type {'absent'|'ok'|'failed'} */ ('absent'),
     errors: /** @type {string[]} */ ([]),
   }
   const log = (/** @type {string} */ message) => ctx.logger?.info?.(`[incognito-chat] ${message}`)
@@ -38,6 +40,17 @@ export function apply(ctx) {
   }
   // Fail closed when the attachment routing cannot be installed.
   const attachmentState = installExperimentalAttachments(ctx, warn, log)
+
+  ctx.inject(['subagents'], (child) => {
+    try {
+      const restore = patchSubagentStart(unwrapService(child.subagents))
+      state.subagentGuard = 'ok'
+      child.effect(() => () => { restore(); state.subagentGuard = 'absent' }, 'incognito-chat.subagent-guard')
+    } catch (error) {
+      state.subagentGuard = 'failed'
+      warn(`cannot protect subagent startup: ${String(error)}`)
+    }
+  })
 
   ctx.inject(['deepseekLlmApiExtensions'], (child) => {
     try {
@@ -96,10 +109,11 @@ export function apply(ctx) {
   })
 
   const status = () => ({
-    ready: state.persistence === 'ok' && state.projectionCache !== 'failed' && state.sessionLog !== 'failed' && attachmentState.status === 'ok',
+    ready: state.persistence === 'ok' && state.projectionCache !== 'failed' && state.sessionLog !== 'failed' && state.subagentGuard !== 'failed' && attachmentState.status === 'ok',
     persistence: state.persistence,
     projectionCache: state.projectionCache,
     sessionLog: state.sessionLog,
+    subagentGuard: state.subagentGuard,
     attachments: attachmentState?.status ?? 'unprotected',
     liveSessions: store.size,
     liveIds: [...store.handles.keys()],

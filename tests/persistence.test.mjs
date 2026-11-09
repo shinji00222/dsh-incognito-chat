@@ -128,3 +128,12 @@ test('草稿本：关闭后清空内容、从仓库移除、再操作报错', as
   assert.equal(handle.events.length, 0)
   await assert.rejects(handle.read(), { name: 'SessionHandleClosedError' })
 })
+
+test('拒绝无痕会话创建普通 ID 子会话，普通父会话仍可创建', async () => {
+  const jsonl = fakeJsonl()
+  wrapPersistence(jsonl, new IncognitoStore())
+  await assert.rejects(jsonl.create({ id: 'child-ordinary-id', parentSession: INCOGNITO_ID }), /暂不支持/)
+  assert.deepEqual(jsonl.created, [])
+  await jsonl.create({ id: 'normal-child', parentSession: NORMAL_ID })
+  assert.deepEqual(jsonl.created, ['normal-child'])
+})

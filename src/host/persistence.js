@@ -71,6 +71,9 @@ export function wrapPersistence(persistence, store) {
    * @this {any} @param {any} header @param {any} [options]
    */
   async function create(header, options) {
+    if (isIncognito(header?.parentSession)) {
+      throw new Error('无痕对话暂不支持创建子会话，避免子会话留下记录')
+    }
     if (!isIncognito(header?.id)) return original.call(this ?? persistence, header, options)
     options?.signal?.throwIfAborted()
     return store.create(header, options?.inheritedEventCount ?? 0)

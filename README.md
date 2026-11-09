@@ -20,7 +20,7 @@
 
 ```sh
 npm pack
-dsh plugin --profile desktop add ./dsh-incognito-chat-0.1.0-preview.10.tgz
+dsh plugin --profile desktop add ./dsh-incognito-chat-0.1.0-preview.11.tgz
 ```
 
 需要 DSH 0.2.1 左右的版本。插件启动时会自检，内部接口对不上就把开关变灰，不会假装在无痕。
@@ -32,6 +32,7 @@ dsh plugin --profile desktop add ./dsh-incognito-chat-0.1.0-preview.10.tgz
 - 对话开着的时候，`workspace.json` 里会临时记下这个会话的 id（只有 id，没有内容），离开时删掉；DSH 崩了的话，下次启动时清掉
 - 桌面附件保护仍在测试：附件使用期间会写入临时目录，删除不保证磁盘上的旧数据不可恢复；不要用于需要可靠安全擦除的内容
 - 手动输入 `@` 引用文件时，工具可能直接读取原文件，不会删除或保护那个原文件
+- 无痕对话暂不支持启动子 agent 或创建子会话；保护措施尚待完整桌面验证
 - 后台进程脱离工具生命周期或 DSH 异常退出后的边界尚未完全验证
 - 无痕会话会拦截 `session-log-deepseek` 的额外日志字段；真实桌面请求及子会话路径尚未完整验证，其他插件也可能收集或发送内容
 - 旧版本曾将未发送的无痕草稿写入浏览器存储，升级不会擦除底层日志中的旧数据
