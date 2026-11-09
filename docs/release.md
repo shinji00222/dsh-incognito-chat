@@ -26,12 +26,13 @@ npm pack --pack-destination artifacts
 - 产物：`artifacts/<name>-<version>.tgz`，记录文件名、大小和 SHA-256。
 - 更新 `package.json` 的 `version`、`README.md` 安装命令中的文件名、`CHANGELOG.md` 的版本段。
 - 提交后打本地 annotated tag：`git tag -a v<version> -m "<version> candidate: <summary>"`。
-- 推送提交和 tag 需要单独授权；tag 未推送时只在本机生效。
+- 推送提交和 tag 需要单独授权；tag 未推送时只在本机生效。2026-11-09 已授权并推送 preview.11 候选。
 
 ## 当前候选记录
 
 - 版本：`0.1.0-preview.11`（候选，未发布，未安装到真实 desktop）
-- tag：`v0.1.0-preview.11`（指向包含本记录的候选提交）
+- tag：`v0.1.0-preview.11`（指向候选提交 bffb3cd；已推送）
+- 推送：`main` 与 tag 已推送到 origin（2026-11-09）
 - 产物：`artifacts/dsh-incognito-chat-0.1.0-preview.11.tgz`，27,627 字节，SHA-256 `1bfdf1cd2d7b72e2c61f1028d911566ed165d4d3e6fe67e58a46ff77fd2b61b2`
 - 隔离验证：M10 请求链路普通/无痕对照与负向对照通过；M11 真实子 Agent 服务入口验证连续 3 次通过（无痕父会话被拒且无子会话文件，普通父会话同一入口创建子会话并落盘）；候选 tgz 装入 `work/candidate-preview11-final/home` 后 `ready=true`，persistence/projectionCache/sessionLog/subagentGuard/attachments 全 `ok`
 - 自动测试：`npm test` 72/72 通过
