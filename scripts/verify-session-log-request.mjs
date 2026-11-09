@@ -23,7 +23,7 @@ import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
-import { checkCapturedRequests, formatFindings } from './lib/session-log-request-check.mjs'
+import { checkCapturedRequests, formatFindings, recordCapturedRequest, checkCaptureCounts } from './lib/session-log-request-check.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const argv = process.argv.slice(2)
@@ -43,12 +43,23 @@ const FIELD = 'dsh_session_log'
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function createRunDir() {
+  const work = path.join(root, 'work')
+  fs.mkdirSync(work, { recursive: true })
+  const realWork = fs.realpathSync(work)
+  if (realWork.toLowerCase() !== path.join(fs.realpathSync(root), 'work').toLowerCase()) throw new Error('work must not redirect to another directory')
   const explicit = option('--run-dir')
-  if (explicit) return path.resolve(root, explicit)
+  if (argv.includes('--run-dir') && (!explicit || explicit.startsWith('--'))) throw new Error('--run-dir requires a new directory under work')
+  if (explicit) {
+    const candidate = path.resolve(root, explicit)
+    if (path.dirname(candidate).toLowerCase() !== path.resolve(work).toLowerCase()) throw new Error('--run-dir must be a direct child of work')
+    const target = path.join(realWork, path.basename(candidate))
+    fs.mkdirSync(target) // atomic: refuse existing paths, including symlinks
+    return target
+  }
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
   for (let attempt = 0; ; attempt += 1) {
-    const candidate = path.join(root, 'work', `session-log-request-${stamp}${attempt === 0 ? '' : `-${attempt}`}`)
-    if (!fs.existsSync(candidate)) return candidate
+    const candidate = path.join(realWork, `session-log-request-${stamp}${attempt === 0 ? '' : `-${attempt}`}`)
+    try { fs.mkdirSync(candidate); return candidate } catch (error) { if (error.code !== 'EEXIST') throw error }
   }
 }
 
@@ -124,7 +135,7 @@ function buildIsolatedProfile({ runDir, disableSessionLog, baseURL }) {
 function startMockServer({ runDir, normalProbe, incognitoProbe }) {
   const requestsDir = path.join(runDir, 'requests')
   fs.mkdirSync(requestsDir, { recursive: true })
-  const captures = { normal: null, incognito: null, other: [] }
+  const captures = { normal: [], incognito: [], unclassified: 0 }
   const respond = () => {
     const text = 'M10 synthetic completion.'
     const events = [
@@ -151,12 +162,8 @@ function startMockServer({ runDir, normalProbe, incognitoProbe }) {
     const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
     fs.appendFileSync(path.join(runDir, 'mock.log'), `${request.method} ${pathname} ${raw.length}\n`)
     if (request.method === 'POST' && pathname.endsWith('/messages')) {
-      const text = raw
-      const slot = text.includes(normalProbe) ? 'normal' : text.includes(incognitoProbe) ? 'incognito' : null
-      if (slot === null) {
-        captures.other.push({ url: request.url, bytes: raw.length })
-      } else if (captures[slot] === null) {
-        captures[slot] = body
+      const slot = recordCapturedRequest(captures, raw, body, normalProbe, incognitoProbe)
+      if (slot !== null && captures[slot].length === 1) {
         writeFile(path.join(requestsDir, `${slot}.json`), JSON.stringify(body, null, 2))
       }
       const sse = respond()
@@ -267,7 +274,6 @@ async function killProcessTree(child) {
 
 async function runHarness({ disableSessionLog }) {
   const runDir = createRunDir()
-  fs.mkdirSync(runDir, { recursive: true })
   const nonce = randomUUID().slice(0, 8)
   const normalProbe = `M10-NORMAL-${nonce}`
   const incognitoProbe = `M10-INCOGNITO-${nonce}`
@@ -313,9 +319,11 @@ async function runHarness({ disableSessionLog }) {
     redactIsolatedCredentials(home)
   }
 
-  const normalBody = mock.captures.normal
-  const incognitoBody = mock.captures.incognito
+  const normalBody = mock.captures.normal[0] ?? null
+  const incognitoBody = mock.captures.incognito[0] ?? null
   const result = checkCapturedRequests({ normalBody, incognitoBody, normalProbe, incognitoProbe })
+  result.findings.push(...checkCaptureCounts(mock.captures))
+  result.ok = result.findings.every(entry => entry.severity !== 'error')
   const summary = {
     negativeControl: disableSessionLog,
     runDir,
@@ -336,7 +344,7 @@ async function runHarness({ disableSessionLog }) {
       messages: Array.isArray(incognitoBody.messages) ? incognitoBody.messages.length : null,
       requestBytes: JSON.stringify(incognitoBody).length,
     },
-    otherRequests: mock.captures.other.length,
+    requestCounts: { normal: mock.captures.normal.length, incognito: mock.captures.incognito.length, unclassified: mock.captures.unclassified },
     ok: result.ok,
     findings: result.findings,
   }

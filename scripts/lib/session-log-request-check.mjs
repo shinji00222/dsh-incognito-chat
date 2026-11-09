@@ -10,6 +10,28 @@ export const FIELD = 'dsh_session_log'
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 
+// Refuse ambiguous or additional requests instead of silently ignoring them.
+export function recordCapturedRequest(captures, raw, body, normalProbe, incognitoProbe) {
+  const normal = raw.includes(normalProbe)
+  const incognito = raw.includes(incognitoProbe)
+  if (normal === incognito) {
+    captures.unclassified += 1
+    return null
+  }
+  const slot = normal ? 'normal' : 'incognito'
+  captures[slot].push(body)
+  return slot
+}
+
+export function checkCaptureCounts(captures) {
+  const findings = []
+  for (const slot of ['normal', 'incognito']) {
+    if (captures[slot].length !== 1) findings.push({ severity: 'error', code: 'REQUEST_COUNT', message: `${slot} 请求数为 ${captures[slot].length}，预期恰好为 1` })
+  }
+  if (captures.unclassified !== 0) findings.push({ severity: 'error', code: 'UNCLASSIFIED_REQUEST', message: `存在 ${captures.unclassified} 个无法唯一归属的请求` })
+  return findings
+}
+
 /**
  * @param {unknown} body 请求体（已解析的 JSON）
  * @returns {string} 用于搜索合成探针的对话文本

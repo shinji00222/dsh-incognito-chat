@@ -56,6 +56,8 @@ A14 验证的是现有父进程判断逻辑，不证明已退出的 DSH 没有�
 | M13 | 会话关闭时有延迟写入，确认完成关闭和清理后目录不会重新出现；清理失败要如实提示，普通会话不受影响 | 2026-11-09：自动测试中，受控附件延迟写入完成后才清理，清理后新操作被拒绝；目标异常时清理报错；延迟会话事件不会恢复内存或写入普通日志。另一个无痕附件与普通日志对照正常。灵感来自 [dsh-incognito 延迟清理实现](https://github.com/HuiHuitie-zhu/dsh-incognito/blob/main/lib/index.js) | **部分验证**：尚未覆盖真实 DSH 桌面、用户界面错误提示、脱离受控生命周期的外部进程及直接重建目录 |
 | M14 | 候选安装包在隔离 DSH_HOME 用官方 plugin CLI 安装并启动，自检 status 各子系统为 ok | 2026-11-09：`artifacts/dsh-incognito-chat-0.1.0-preview.11.tgz` 装入 `work/candidate-preview11-final/home`；`node scripts/check-isolated-status.mjs --home work/candidate-preview11-final/home` 输出 `ready=true`，persistence/projectionCache/sessionLog/subagentGuard/attachments 全 `ok`；真实 desktop 未安装 | 真实 desktop 安装、重启和桌面回归仍未做 |
 
+2026-11-09 复核：验证脚本拒绝重复或无法唯一归属的请求，运行目录必须是 `work/` 下不存在的直接子目录；新增防回归测试。实际验证仍以脚本运行期间捕获到的请求为范围。
+
 ### M10 隔离请求链路验证（2026-11-09）
 
 目的：补上只验证提供者和注册表之外的缺口，确认经过真实 DSH host 组装并实际发送的请求里，普通会话带 `dsh_session_log`、无痕会话不带该字段，而且无痕对话本身仍按正常消息发送。
