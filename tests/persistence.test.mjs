@@ -137,3 +137,21 @@ test('拒绝无痕会话创建普通 ID 子会话，普通父会话仍可创建'
   await jsonl.create({ id: 'normal-child', parentSession: NORMAL_ID })
   assert.deepEqual(jsonl.created, ['normal-child'])
 })
+
+test('关闭无痕会话后延迟事件不能恢复内存或写入普通会话日志', async () => {
+  const jsonl = fakeJsonl()
+  const store = new IncognitoStore()
+  wrapPersistence(jsonl, store)
+  const handle = await jsonl.create({ id: INCOGNITO_ID })
+  let resume
+  const gate = new Promise(resolve => { resume = resolve })
+  const delayed = gate.then(() => handle.append([event(0)]))
+  await handle.close()
+  resume()
+  await assert.rejects(delayed, { name: 'SessionHandleClosedError' })
+  assert.equal(handle.receiveLive(event(0)), false)
+  assert.equal(store.get(INCOGNITO_ID), undefined)
+  assert.deepEqual(jsonl.created, [])
+  await jsonl.create({ id: NORMAL_ID })
+  assert.deepEqual(jsonl.created, [NORMAL_ID])
+})

@@ -111,3 +111,51 @@ test('已经结束的操作不能借用残留的异步上下文绕过关闭', as
     await assert.rejects(detached, /closed/)
   } finally { await rm(base, { recursive: true, force: true }) }
 })
+
+test('延迟写入完成后才清理，关闭后的操作无法重新创建目录', async () => {
+  const base = await mkdtemp(path.join(path.resolve('work'), 'temp-attachment-test-'))
+  try {
+    const temp = new TemporaryAttachments(base)
+    let start, resume, dir
+    const begun = new Promise(resolve => { start = resolve })
+    const gate = new Promise(resolve => { resume = resolve })
+    const order = []
+    const writing = temp.use(a, async sessionDir => {
+      dir = sessionDir
+      start()
+      await gate
+      await writeFile(path.join(dir, 'delayed-probe'), 'synthetic')
+      order.push('write-finished')
+    })
+    await begun
+    const otherDir = await temp.use(b, async sessionDir => {
+      await writeFile(path.join(sessionDir, 'other-probe'), 'keep')
+      return sessionDir
+    })
+    const closing = temp.close(a).then(() => order.push('close-finished'))
+    await assert.rejects(temp.use(a, async () => {}), /clos/)
+    assert.deepEqual(order, [])
+    resume()
+    await writing
+    await closing
+    assert.deepEqual(order, ['write-finished', 'close-finished'])
+    await assert.rejects(readFile(path.join(dir, 'delayed-probe')), { code: 'ENOENT' })
+    await assert.rejects(temp.use(a, async () => { throw new Error('must not run') }), /closed/)
+    await assert.rejects(readFile(path.join(dir, 'delayed-probe')), { code: 'ENOENT' })
+    assert.equal(await readFile(path.join(otherDir, 'other-probe'), 'utf8'), 'keep')
+    await temp.close(b)
+  } finally { await rm(base, { recursive: true, force: true }) }
+})
+
+test('清理目标异常时关闭失败，不返回清理成功', async () => {
+  const base = await mkdtemp(path.join(path.resolve('work'), 'temp-attachment-test-'))
+  try {
+    const temp = new TemporaryAttachments(base)
+    const dir = await temp.use(a, async sessionDir => sessionDir)
+    await rm(dir, { recursive: true })
+    await writeFile(dir, 'not a directory')
+    await assert.rejects(temp.close(a), /unsafe temporary attachment cleanup target/)
+    assert.equal(await readFile(dir, 'utf8'), 'not a directory')
+    await assert.rejects(temp.use(a, async () => {}), /closed/)
+  } finally { await rm(base, { recursive: true, force: true }) }
+})
