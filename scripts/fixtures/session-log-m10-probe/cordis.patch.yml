@@ -1,0 +1,4 @@
+# Mounts the synthetic M10 request probe. Only used in an isolated DSH_HOME.
+- insert:
+    - id: session-log-m10-probe
+      name: 'dsh-session-log-m10-probe'

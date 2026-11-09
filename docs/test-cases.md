@@ -29,6 +29,8 @@
 | A13 | 桌面无痕选择、拖放、粘贴文件转成无宿主路径副本；普通会话不变，未知归属或目录被拒绝 | `tests/desktop-file-guard.test.mjs` |
 | A16 | 无痕父会话启动子 agent 或创建子会话时拒绝；普通会话仍能调用原方法 | `tests/subagent-guard.test.mjs`、`tests/persistence.test.mjs` |
 | A15 | 无痕请求不准备额外会话日志，普通请求和其他字段不受影响；覆盖先注册和后注册 | `tests/session-log.test.mjs`；`node scripts/verify-session-log-installed.mjs` 使用本机 DSH 的提供者与注册表做合成对照 |
+| A17 | 请求层判定：普通对照必须带 `dsh_session_log` 且含本轮探针；无痕不得带该字段、但消息仍在；普通对照缺字段必须失败 | `tests/session-log-request.test.mjs` |
+| A18 | 后台任务与删除的事件顺序：任务使用附件期间不清理，任务结束后才清理；结束状态无法确认时保留附件 | `tests/attachment-lifecycle-order.test.mjs` |
 | A14 | 启动清理只处理已退出进程的插件目录，保留活动进程及未知目录 | `tests/attachment-crash-cleanup.test.mjs` |
 
 A14 验证的是现有父进程判断逻辑，不证明已退出的 DSH 没有脱离的子进程仍在使用附件。
@@ -46,12 +48,45 @@ A14 验证的是现有父进程判断逻辑，不证明已退出的 DSH 没有�
 | M05 | 从资源管理器复制 PNG 文件并粘贴，发送后模型读取 | preview.6 真实 desktop 有记录 | 其他截图应用的剪贴板格式未覆盖 |
 | M06 | 拖入 PNG，模型读取；检查普通附件目录及删除后的临时目录 | preview.8 真实 desktop 有记录 | 新版本回归 |
 | M07 | 同图用于普通和两个无痕会话；删除一个无痕会话后其他会话仍可预览 | preview.8 真实 desktop 有记录 | 新版本回归；不要删除仍被普通会话引用的对象 |
-| M08 | 后台任务延迟读取附件，运行中删除会话；任务仍需要文件时不得提前清理 | preview.10 真实 desktop 用约 50ms 采样观察到进程和文件从同时存在变为同时不存在 | 采样不能证明严格先后；并发读写、删除时序仍需验证 |
+| M08 | 后台任务延迟读取附件，运行中删除会话；任务仍需要文件时不得提前清理 | preview.10 真实 desktop 用约 50ms 采样观察到进程和文件从同时存在变为同时不存在 | 采样不能证明严格先后；自动测试 A18 已用事件顺序覆盖任务结束前后与失败路径；真实桌面并发读写、删除时序仍需验证 |
 | M09 | 无痕附件存在时异常退出，再启动并检查残留清理 | preview.6 真实 desktop 强制退出后重启，旧进程目录移除 | 未覆盖活跃的脱离型子进程；不能证明其已停止 |
-| M10 | 检查实际模型请求，区分正常消息与额外会话日志；普通会话作对照 | 2026-11-07：本机 DSH 的真实日志提供者和注册表隔离验证，修改前无痕字段含合成探针；修改后无痕字段为空、普通对照仍含探针。隔离 DSH 加载新包后 `sessionLog: ok` | **未验证**真实桌面网络请求及子会话路径；此验证使用替身上下文 |
+| M10 | 检查实际模型请求，区分正常消息与额外会话日志；普通会话作对照 | 2026-11-07：本机 DSH 的真实日志提供者和注册表隔离验证，修改前无痕字段含合成探针；修改后无痕字段为空、普通对照仍含探针。隔离 DSH 加载新包后 `sessionLog: ok`。2026-11-09：隔离 DSH_HOME + 本地 Messages 模拟端，走真实 host 请求组装和 HTTP 发送链路；普通请求带字段且含探针，无痕请求不带字段但 messages/system 仍在；普通对照缺字段时脚本判失败。见下方「M10 隔离请求链路验证」 | **未验证**真实桌面及真实服务商的网络链路；子会话路径改由 preview.11 的子 agent 拒绝保护覆盖（M11），本验证未实测真实子会话和真实接受水位。此验证使用隔离 profile 和模拟接收端 |
 | M11 | 检查脱离生产者 Promise 的进程或跨会话子 agent 仍使用附件时的删除、崩溃和重启行为 | 2026-11-09 静态检查：本机 DSH 默认给子 agent 普通 UUID；候选版在启动入口和持久化入口增加拒绝保护，隔离服务报告 `subagentGuard: ok`，单元测试通过 | 子 agent 的真实启动路径和普通对照未实测；脱离型进程生命周期仍未解决 |
 | M12 | 自检失败时无痕开关不可用并提示；普通功能不受影响 | 有接口缺失的自动测试，未找到完整真实桌面验收记录 | 桌面端故障注入验收 |
 | M13 | 会话关闭时有延迟写入，确认完成关闭和清理后目录不会重新出现；清理失败要如实提示，普通会话不受影响 | 2026-11-09：自动测试中，受控附件延迟写入完成后才清理，清理后新操作被拒绝；目标异常时清理报错；延迟会话事件不会恢复内存或写入普通日志。另一个无痕附件与普通日志对照正常。灵感来自 [dsh-incognito 延迟清理实现](https://github.com/HuiHuitie-zhu/dsh-incognito/blob/main/lib/index.js) | **部分验证**：尚未覆盖真实 DSH 桌面、用户界面错误提示、脱离受控生命周期的外部进程及直接重建目录 |
+| M14 | 候选安装包在隔离 DSH_HOME 用官方 plugin CLI 安装并启动，自检 status 各子系统为 ok | 2026-11-09：`artifacts/dsh-incognito-chat-0.1.0-preview.11.tgz` 装入 `work/candidate-preview11/home`；`node scripts/check-isolated-status.mjs --home work/candidate-preview11/home` 输出 `ready=true`，persistence/projectionCache/sessionLog/subagentGuard/attachments 全 `ok`；真实 desktop 未安装 | 真实 desktop 安装、重启和桌面回归仍未做 |
+
+### M10 隔离请求链路验证（2026-11-09）
+
+目的：补上只验证提供者和注册表之外的缺口，确认经过真实 DSH host 组装并实际发送的请求里，普通会话带 `dsh_session_log`、无痕会话不带该字段，而且无痕对话本身仍按正常消息发送。
+
+做法：
+
+- 脚本：`node scripts/verify-session-log-request.mjs`；判定逻辑在 `scripts/lib/session-log-request-check.mjs`，纯判定单元测试在 `tests/session-log-request.test.mjs`。
+- 每次新建隔离目录 `work/session-log-request-<时间戳>/`：独立 `DSH_HOME`、独立 workspace、独立日志和抓包；不读取也不改动真实 desktop profile。
+- 隔离 web profile 直接装入当前工作树的 `src/` 和探针插件 `scripts/fixtures/session-log-m10-probe/`；探针在 host 内用真实 Agent 链路创建 `session-<uuid>` 和 `session-incognito-<uuid>` 两个会话，各发一条合成消息。
+- 模型端点通过隔离 profile 的 `llm-deepseek.baseURL` 指向本地 `127.0.0.1` 模拟服务；请求里只出现合成内容。API key 使用本地假值，模拟端只记录请求体，不记录 header、Cookie 或凭据；日志中的 web token 和 `sk-` 串会打码，隔离 home 启动时生成的浏览器会话 grant 在运行后也会打码。
+- 模拟服务对 `/messages` 返回固定的合成 SSE，让回合正常结束；`session-title-llm` 和 `session-telemetry-otel` 在隔离 profile 中关闭，避免额外请求干扰。
+- 判定：普通请求必须有 `dsh_session_log` 且字段内含普通探针；无痕请求必须没有该字段，但 `messages` 必须含无痕探针；任何一侧缺失都直接失败。普通对照缺字段时脚本以 `CONTROL_MISSING_FIELD` 判失败，不能算作无痕通过。
+
+运行方法：
+
+```sh
+node scripts/verify-session-log-request.mjs
+node scripts/verify-session-log-request.mjs --negative-control
+```
+
+2026-11-09 结果（DSH 0.2.1-rc.5 桌面运行时，隔离 DSH_HOME，当前工作树 preview.11 源码）：
+
+- 正向：`work/session-log-request-20261109134359/`。普通请求 `model=deepseek-flash`、`messages=1`、`dsh_session_log` 7577 字节且含普通探针；无痕请求同 model、`messages=1`、无 `dsh_session_log`、无痕探针在 `messages` 中；两侧 `system`/`tools` 正常；其他请求 0 条；结果 PASS。
+- 负向对照：`work/session-log-request-20261109134430/`（隔离 profile 中禁用 `session-log-deepseek` 行）。普通请求没有字段，脚本按 `CONTROL_MISSING_FIELD` 判失败并输出「不得当作通过」，负向对照 PASS。
+- 单测：`node --test --test-isolation=none tests/session-log-request.test.mjs`，8/8 通过。
+
+覆盖与未覆盖：
+
+- 覆盖：host 侧真实会话创建与消息入队（`agents.create` + `followup`）、`deepseekLlmApiExtensions.prepare` 的真实字段合并、真实 `POST /v1/messages` HTTP 发送（到本地模拟端）、普通和无痕的同轮对照、普通对照缺失时的失败保护。
+- 未覆盖：真实 desktop profile、真实 DeepSeek 服务端（模拟端固定 200 和合成 SSE，不验证接受水位、重试、代理和网络故障）、真实桌面 UI（本验证不经过新建对话页、开关和客户端会话创建）、session title 等辅助模型请求（隔离 profile 关闭了 `session-title-llm`）、附件/工具调用、子 agent 路径（preview.11 已在子 agent 启动和子会话创建入口拒绝，但真实桌面路径未实测）。
+- 该脚本依赖本机 DSH 桌面运行时和本机回环 HTTP，不放进 `npm test`；`npm test` 只跑纯判定单元测试。
 
 ## 每次迭代怎么用
 
