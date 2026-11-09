@@ -27,7 +27,7 @@
 | A11 | 删除等待附件保存、登记及工具读取结束；已运行工具可完成，新工具被拒绝；失败时释放等待 | `tests/attachment-store-pool.test.mjs` |
 | A12 | 删除等待所属后台生产者；状态异常、未结束或无法取得完成句柄时拒绝清理；归属错误拒绝启动；普通任务不受影响 | `tests/attachment-jobs.test.mjs` |
 | A13 | 桌面无痕选择、拖放、粘贴文件转成无宿主路径副本；普通会话不变，未知归属或目录被拒绝 | `tests/desktop-file-guard.test.mjs` |
-| A16 | 无痕父会话启动子 agent 或创建子会话时拒绝；普通会话仍能调用原方法 | `tests/subagent-guard.test.mjs`、`tests/persistence.test.mjs` |
+| A16 | 无痕父会话启动子 agent 或创建子会话时拒绝；普通会话仍能调用原方法 | `tests/subagent-guard.test.mjs`、`tests/persistence.test.mjs`；隔离真实服务验证 `scripts/verify-subagent-guard.mjs`（见 M11） |
 | A15 | 无痕请求不准备额外会话日志，普通请求和其他字段不受影响；覆盖先注册和后注册 | `tests/session-log.test.mjs`；`node scripts/verify-session-log-installed.mjs` 使用本机 DSH 的提供者与注册表做合成对照 |
 | A17 | 请求层判定：普通对照必须带 `dsh_session_log` 且含本轮探针；无痕不得带该字段、但消息仍在；普通对照缺字段必须失败 | `tests/session-log-request.test.mjs` |
 | A18 | 后台任务与删除的事件顺序：任务使用附件期间不清理，任务结束后才清理；结束状态无法确认时保留附件 | `tests/attachment-lifecycle-order.test.mjs` |
@@ -51,7 +51,7 @@ A14 验证的是现有父进程判断逻辑，不证明已退出的 DSH 没有�
 | M08 | 后台任务延迟读取附件，运行中删除会话；任务仍需要文件时不得提前清理 | preview.10 真实 desktop 用约 50ms 采样观察到进程和文件从同时存在变为同时不存在 | 采样不能证明严格先后；自动测试 A18 已用事件顺序覆盖任务结束前后与失败路径；真实桌面并发读写、删除时序仍需验证 |
 | M09 | 无痕附件存在时异常退出，再启动并检查残留清理 | preview.6 真实 desktop 强制退出后重启，旧进程目录移除 | 未覆盖活跃的脱离型子进程；不能证明其已停止 |
 | M10 | 检查实际模型请求，区分正常消息与额外会话日志；普通会话作对照 | 2026-11-07：本机 DSH 的真实日志提供者和注册表隔离验证，修改前无痕字段含合成探针；修改后无痕字段为空、普通对照仍含探针。隔离 DSH 加载新包后 `sessionLog: ok`。2026-11-09：隔离 DSH_HOME + 本地 Messages 模拟端，走真实 host 请求组装和 HTTP 发送链路；普通请求带字段且含探针，无痕请求不带字段但 messages/system 仍在；普通对照缺字段时脚本判失败。见下方「M10 隔离请求链路验证」 | **未验证**真实桌面及真实服务商的网络链路；子会话路径改由 preview.11 的子 agent 拒绝保护覆盖（M11），本验证未实测真实子会话和真实接受水位。此验证使用隔离 profile 和模拟接收端 |
-| M11 | 检查脱离生产者 Promise 的进程或跨会话子 agent 仍使用附件时的删除、崩溃和重启行为 | 2026-11-09 静态检查：本机 DSH 默认给子 agent 普通 UUID；候选版在启动入口和持久化入口增加拒绝保护，隔离服务报告 `subagentGuard: ok`，单元测试通过 | 子 agent 的真实启动路径和普通对照未实测；脱离型进程生命周期仍未解决 |
+| M11 | 检查脱离生产者 Promise 的进程或跨会话子 agent 仍使用附件时的删除、崩溃和重启行为；并验证无痕父会话不能启动子 agent | 2026-11-09 静态检查：本机 DSH 默认给子 agent 普通 UUID；候选版在启动入口和持久化入口增加拒绝保护，隔离服务报告 `subagentGuard: ok`，单元测试通过。同日隔离真实服务验证：无痕父会话 `startActivation` 被拒且 sessions 无新增文件，直接 `persistence.create` 被拒；普通父会话同一入口成功创建子会话并落盘，`parentSession` 正确；连续 3 次 PASS。见下方「M11 隔离子 Agent 服务验证」 | 本验证只覆盖 in-process `spawn` 的 `startActivation` 服务入口，未走模型调用 `subagent` 工具的参数解析/预设路径；外部 provider（ACP 等）及子进程、真实 desktop 和附件生命周期仍未覆盖 |
 | M12 | 自检失败时无痕开关不可用并提示；普通功能不受影响 | 有接口缺失的自动测试，未找到完整真实桌面验收记录 | 桌面端故障注入验收 |
 | M13 | 会话关闭时有延迟写入，确认完成关闭和清理后目录不会重新出现；清理失败要如实提示，普通会话不受影响 | 2026-11-09：自动测试中，受控附件延迟写入完成后才清理，清理后新操作被拒绝；目标异常时清理报错；延迟会话事件不会恢复内存或写入普通日志。另一个无痕附件与普通日志对照正常。灵感来自 [dsh-incognito 延迟清理实现](https://github.com/HuiHuitie-zhu/dsh-incognito/blob/main/lib/index.js) | **部分验证**：尚未覆盖真实 DSH 桌面、用户界面错误提示、脱离受控生命周期的外部进程及直接重建目录 |
 | M14 | 候选安装包在隔离 DSH_HOME 用官方 plugin CLI 安装并启动，自检 status 各子系统为 ok | 2026-11-09：`artifacts/dsh-incognito-chat-0.1.0-preview.11.tgz` 装入 `work/candidate-preview11-final/home`；`node scripts/check-isolated-status.mjs --home work/candidate-preview11-final/home` 输出 `ready=true`，persistence/projectionCache/sessionLog/subagentGuard/attachments 全 `ok`；真实 desktop 未安装 | 真实 desktop 安装、重启和桌面回归仍未做 |
@@ -89,6 +89,38 @@ node scripts/verify-session-log-request.mjs --negative-control
 - 覆盖：host 侧真实会话创建与消息入队（`agents.create` + `followup`）、`deepseekLlmApiExtensions.prepare` 的真实字段合并、真实 `POST /v1/messages` HTTP 发送（到本地模拟端）、普通和无痕的同轮对照、普通对照缺失时的失败保护。
 - 未覆盖：真实 desktop profile、真实 DeepSeek 服务端（模拟端固定 200 和合成 SSE，不验证接受水位、重试、代理和网络故障）、真实桌面 UI（本验证不经过新建对话页、开关和客户端会话创建）、session title 等辅助模型请求（隔离 profile 关闭了 `session-title-llm`）、附件/工具调用、子 agent 路径（preview.11 已在子 agent 启动和子会话创建入口拒绝，但真实桌面路径未实测）。
 - 该脚本依赖本机 DSH 桌面运行时和本机回环 HTTP，不放进 `npm test`；`npm test` 只跑纯判定单元测试。
+
+### M11 隔离子 Agent 服务验证（2026-11-09）
+
+目的：验证 `subagent-guard.js` 和 `persistence.js` 的拒绝发生在子会话写入或 provider 启动之前，并确认普通父会话同一入口不被误伤。
+
+做法：
+
+- 脚本：`node scripts/verify-subagent-guard.mjs`；探针在 `scripts/fixtures/subagent-guard-probe/`。
+- 每次新建 `work/subagent-guard-<时间戳>/`，独立 `DSH_HOME`、workspace、模拟模型端；不读取不改动真实 desktop profile。
+- 探针在 host 内用真实 `agents.create` 创建普通和无痕两个 Agent，然后调用真实 `ctx.subagents.startActivation`（`dsh-tool-subagent` 的 `subagent` 工具最终使用的同一服务入口）：
+  - 无痕父会话：期望被 `subagent-guard` 拒绝；比较调用前后 `$DSH_HOME/sessions` 文件，普通父会话自己的文件（路径含普通 id）不计入新增子会话。
+  - 直接调用 `sessionPersistence.create({ parentSession: <无痕 id> })`：期望被 `persistence` 层拒绝，且不产生文件。
+  - 普通父会话：同一入口启动子会话；检查 `persistence.stat(childId).header.parentSession` 和新增会话文件。
+- 模型端点指向本地模拟 SSE；全部使用合成内容，API key 为本地假值；日志 token 和隔离 home 凭据在运行后打码。
+
+运行方法：
+
+```sh
+node scripts/verify-subagent-guard.mjs
+```
+
+2026-11-09 结果（连续 3 次 PASS：`work/subagent-guard-20261109140258/`、`work/subagent-guard-20261109140302/`、`work/subagent-guard-20261109140306/`；另一次独立复跑 `work/subagent-guard-20261109140442/` 同样 PASS）：
+
+- 无痕父会话 `startActivation` 抛出「无痕对话暂不支持启动子 agent，避免子会话留下记录」；调用前后 sessions 文件 1 → 1，没有未归属的新增文件。
+- 直接带无痕 `parentSession` 的 `persistence.create` 抛出「无痕对话暂不支持创建子会话，避免子会话留下记录」；sessions 文件数不变。
+- 普通父会话同一入口返回 childId；`persistence.stat` 可查到，`header.parentSession` 等于普通父会话 id，新增会话文件路径包含子 id。
+- 说明：探针里 `sessions.get(childId)` 返回空（probe 服务可见性限制），因此以 `persistence.stat` 的 header 和会话文件作为证据，不把 live 查询当作通过条件。
+
+覆盖与未覆盖：
+
+- 覆盖：真实 host 的 Agent 创建、真实 `subagents.startActivation` 服务入口、两层拒绝、无痕尝试前后会话文件、普通父会话对照。
+- 未覆盖：模型调用 `subagent` 工具的参数解析、预设和工具可见性、外部 provider（ACP/SDK/Codex）及其子进程、真实 desktop、附件生命周期。本验证使用 in-process `spawn` provider；「未启动外部进程」只说明该 provider 路径不涉及外部进程，不能推广到所有 provider。
 
 ## 每次迭代怎么用
 

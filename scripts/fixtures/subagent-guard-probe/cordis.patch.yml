@@ -1,0 +1,4 @@
+# Mounts the synthetic M11 subagent-guard probe. Only used in an isolated DSH_HOME.
+- insert:
+    - id: subagent-guard-m11-probe
+      name: 'dsh-subagent-guard-m11-probe'

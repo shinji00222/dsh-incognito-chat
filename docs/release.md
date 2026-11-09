@@ -33,7 +33,7 @@ npm pack --pack-destination artifacts
 - 版本：`0.1.0-preview.11`（候选，未发布，未安装到真实 desktop）
 - tag：`v0.1.0-preview.11`（指向包含本记录的候选提交）
 - 产物：`artifacts/dsh-incognito-chat-0.1.0-preview.11.tgz`，27,627 字节，SHA-256 `1bfdf1cd2d7b72e2c61f1028d911566ed165d4d3e6fe67e58a46ff77fd2b61b2`
-- 隔离验证：M10 请求链路普通/无痕对照与负向对照通过；候选 tgz 装入 `work/candidate-preview11-final/home` 后 `ready=true`，persistence/projectionCache/sessionLog/subagentGuard/attachments 全 `ok`
-- 自动测试：`npm test` 69/69 通过
-- 未做：真实 desktop 安装与 M01–M14 桌面回归、真实服务商请求、真实子 agent 路径
+- 隔离验证：M10 请求链路普通/无痕对照与负向对照通过；M11 真实子 Agent 服务入口验证连续 3 次通过（无痕父会话被拒且无子会话文件，普通父会话同一入口创建子会话并落盘）；候选 tgz 装入 `work/candidate-preview11-final/home` 后 `ready=true`，persistence/projectionCache/sessionLog/subagentGuard/attachments 全 `ok`
+- 自动测试：`npm test` 72/72 通过
+- 未做：真实 desktop 安装与 M01–M14 桌面回归、真实服务商请求、模型调用 `subagent` 工具的参数解析和外部 provider 路径
 - 回退：真实 desktop 仍引用 preview.10；安装候选前保留 profile 备份，失败时恢复旧 tgz 引用并重启 DSH
