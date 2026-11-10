@@ -30,6 +30,13 @@ npm pack --pack-destination artifacts
 
 ## 当前候选记录
 
+- 版本：`0.1.0-preview.13`（2026-11-10 本地候选）
+- 产物：`artifacts/dsh-incognito-chat-0.1.0-preview.13.tgz`，28,346 字节，SHA-256 `e8a5efdb5d428b9b2e3c626c828a1b78112b9646d0ac4e905c4c5040d48ed290`
+- 安装包验证：官方 CLI 分别安装到正常及故障的隔离 web profile，均核对实际版本为 `preview.13`。正常可开启无痕；附件根故障时禁用开关并显示原因，1440 和 768 像素宽度均可见，普通会话仍收到本地模拟回复
+- 桌面现状：本机仍使用 `preview.11`。`preview.13` 的桌面回归、tag 和发布待办
+
+## preview.12 候选记录
+
 - 版本：`0.1.0-preview.12`（2026-11-10 本地候选）
 - 产物：`artifacts/dsh-incognito-chat-0.1.0-preview.12.tgz`，27,946 字节，SHA-256 `b278fd7c0a0ba98dbbbc5301c6641526e62c22da111cb959feeb3604ada97b00`
 - 安装包验证：官方 CLI 安装到全新隔离 web profile，实际加载 `preview.12`；自检 `ready=true`，各保护项均为 `ok`
