@@ -18,7 +18,9 @@ export function installExperimentalAttachments(ctx, warn, log) {
     try {
       const base = path.join(await realpath(os.tmpdir()), 'dsh-incognito-chat-attachments-v1')
       root = await openAttachmentProcessRoot(base)
-      await cleanupExitedAttachmentRoots(root.base)
+      await cleanupExitedAttachmentRoots(root.base, {
+        onDeferred: (name, code) => warn(`stale attachment cleanup deferred for ${name} (${code}); will retry on next startup`),
+      })
       const original = unwrapService(child.attachments)
       if (original.constructor?.name !== 'LocalAttachmentStore' || !original.ctx?.constructor || !original.imageLimits || !original.normalizationPolicy) {
         throw new Error('unsupported attachment backend')

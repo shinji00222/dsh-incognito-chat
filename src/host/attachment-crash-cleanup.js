@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 
 const processDirectory = /^process-([1-9][0-9]*)-([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/
 const normalized = value => process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value)
+const deferredRemovalCodes = new Set(['EACCES', 'EBUSY', 'EPERM', 'ENOTEMPTY'])
 
 function definitelyExited(pid) {
   try { process.kill(pid, 0); return false } catch (error) {
@@ -28,7 +29,7 @@ export async function openAttachmentProcessRoot(base) {
   return { base: actualBase, current }
 }
 
-export async function cleanupExitedAttachmentRoots(base) {
+export async function cleanupExitedAttachmentRoots(base, { onDeferred = () => {} } = {}) {
   const info = await lstat(base)
   if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('unsafe temporary attachment root')
   const actualBase = await realpath(base)
@@ -48,7 +49,9 @@ export async function cleanupExitedAttachmentRoots(base) {
       await rm(actual, { recursive: true })
       removed++
     } catch (error) {
-      if (error?.code !== 'ENOENT') throw error
+      if (error?.code === 'ENOENT') continue
+      if (!deferredRemovalCodes.has(error?.code)) throw error
+      onDeferred(child.name, error.code)
     }
   }
   return removed
