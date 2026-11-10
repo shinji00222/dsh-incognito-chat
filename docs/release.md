@@ -30,6 +30,14 @@ npm pack --pack-destination artifacts
 
 ## 当前候选记录
 
+- 版本：`0.1.0`（2026-11-10，待发布）
+- 产物：`artifacts/dsh-incognito-chat-0.1.0.tgz`，28,529 字节，SHA-256 `5826c06dcc2888abcc3287e3c8000dd202f931e6419496633d5978650fe7ddc5`
+- 核对包内 24 个文件，与已做桌面验收的 `preview.14` 相比，只有版本元数据、README 和 CHANGELOG 有变化。82 项自动测试通过，稳定包经官方 CLI 安装到隔离 web profile 后自检各项为 `ok`
+- 桌面草稿对照（`preview.14`）：切换到无痕时编辑区为空，切回已有普通会话时恢复其原有草稿。检查 7 个可读的 Local Storage 文件，未找到本次无痕草稿探针，找到已有普通草稿探针；另有 1 个文件无法读取
+- 真实桌面仍运行 `preview.14`。原生拖放未在本轮实测；异常退出后独立进程延迟按路径读取附件的限制见 README
+
+## preview.14 候选记录
+
 - 版本：`0.1.0-preview.14`（2026-11-10 本地候选）
 - 产物：`artifacts/dsh-incognito-chat-0.1.0-preview.14.tgz`，28,438 字节，SHA-256 `d8052e00632f9a4dace26a6a0cc11f3ec54c55dc560989af5b4cb267c3064124`
 - 安装包验证：官方 CLI 安装至两份隔离 web profile。正常启动各保护项为 `ok`；附件根被普通文件占用时 `attachments=failed`、`ready=false`。直接加载隔离安装的包，附件生命周期 6 项通过，包含清理故障消除后的重试
