@@ -107,7 +107,7 @@ export class TemporaryAttachments {
     const entry = await pending
     if (entry.drained) return entry.drained
     entry.closing = true
-    entry.drained = (async () => {
+    const cleanup = (async () => {
       if (entry.active) await new Promise(resolve => { entry.wake = resolve })
       const info = await lstat(entry.dir)
       const actual = await realpath(entry.dir)
@@ -118,6 +118,12 @@ export class TemporaryAttachments {
       this.#sessions.delete(id)
       return true
     })()
-    return entry.drained
+    entry.drained = cleanup
+    try {
+      return await cleanup
+    } catch (error) {
+      if (entry.drained === cleanup) entry.drained = null
+      throw error
+    }
   }
 }

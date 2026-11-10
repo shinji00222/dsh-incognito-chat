@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { TemporaryAttachments } from '../src/host/temporary-attachments.js'
 
@@ -156,6 +156,12 @@ test('清理目标异常时关闭失败，不返回清理成功', async () => {
     await writeFile(dir, 'not a directory')
     await assert.rejects(temp.close(a), /unsafe temporary attachment cleanup target/)
     assert.equal(await readFile(dir, 'utf8'), 'not a directory')
+    await assert.rejects(temp.use(a, async () => {}), /closed/)
+    await rm(dir)
+    await mkdir(dir)
+    await writeFile(path.join(dir, 'retry-probe'), 'test')
+    assert.equal(await temp.close(a), true)
+    await assert.rejects(lstat(dir), { code: 'ENOENT' })
     await assert.rejects(temp.use(a, async () => {}), /closed/)
   } finally { await rm(base, { recursive: true, force: true }) }
 })

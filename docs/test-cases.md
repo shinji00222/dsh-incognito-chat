@@ -23,7 +23,7 @@
 | A07 | 无痕草稿留在内存，普通草稿和 sessionStorage 行为保持；保护失效能检测 | `tests/draft-guard.test.mjs` |
 | A08 | 会话归属跨并发、延迟异步流和模型调用保持正确 | `tests/attachment-context.test.mjs` |
 | A09 | 附件入口按会话分流；归属不明拒绝写入或执行；入口缺失时撤销已安装补丁；普通工具不变 | `tests/attachment-hooks.test.mjs` |
-| A10 | 同内容的不同无痕会话使用独立目录；关闭等待已开始操作，拒绝关闭后的新操作和过期上下文 | `tests/temporary-attachments.test.mjs` |
+| A10 | 同内容的不同无痕会话使用独立目录；关闭等待已开始操作，拒绝关闭后的新操作和过期上下文；清理失败后可重试且不重新开放访问 | `tests/temporary-attachments.test.mjs`、`tests/attachment-store-pool.test.mjs` |
 | A11 | 删除等待附件保存、登记及工具读取结束；已运行工具可完成，新工具被拒绝；失败时释放等待 | `tests/attachment-store-pool.test.mjs` |
 | A12 | 删除等待所属后台生产者；状态异常、未结束或无法取得完成句柄时拒绝清理；归属错误拒绝启动；普通任务不受影响 | `tests/attachment-jobs.test.mjs` |
 | A13 | 桌面无痕选择、拖放、粘贴文件转成无宿主路径副本；普通会话不变，未知归属或目录被拒绝 | `tests/desktop-file-guard.test.mjs` |

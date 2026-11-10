@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile, access, readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile, access, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AttachmentStorePool } from '../src/host/attachment-store-pool.js'
 import { AttachmentContext } from '../src/host/attachment-context.js'
@@ -8,6 +8,31 @@ import { patchToolDispatch } from '../src/host/attachment-hooks.js'
 
 const id = 'session-incognito-11111111-1111-4111-8111-111111111111'
 const ref = { attachmentId: 'sha256:' + 'a'.repeat(64) }
+
+test('关闭清理失败后可以重试，关闭期间仍拒绝访问', async () => {
+  const base = await mkdtemp(path.join(path.resolve('work'), 'attachment-pool-retry-test-'))
+  try {
+    let sessionDir
+    const pool = new AttachmentStorePool(base, dir => {
+      sessionDir = dir
+      return {
+        fileHostPath() { return path.join(dir, 'file') },
+        async saveFile() { await writeFile(path.join(dir, 'file'), 'probe'); return ref },
+      }
+    })
+    await pool.saveFile(id, {})
+    await rm(sessionDir, { recursive: true })
+    await writeFile(sessionDir, 'not a directory')
+    await assert.rejects(pool.close(id), /unsafe temporary attachment cleanup target/)
+    await assert.rejects(pool.saveFile(id, {}), /closed/)
+    await rm(sessionDir)
+    await mkdir(sessionDir)
+    await writeFile(path.join(sessionDir, 'file'), 'probe')
+    await pool.closeAll()
+    await assert.rejects(access(sessionDir), { code: 'ENOENT' })
+    await assert.rejects(pool.saveFile(id, {}), /closed/)
+  } finally { await rm(base, { recursive: true, force: true }) }
+})
 
 test('删除等待正在保存的附件及其登记完成', async () => {
   const base = await mkdtemp(path.join(path.resolve('work'), 'attachment-pool-test-'))
