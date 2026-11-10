@@ -45,13 +45,13 @@ A14 验证的是现有父进程判断逻辑，不证明已退出的 DSH 没有�
 | M02 | 输入未发送无痕草稿、关闭后检查浏览器存储；普通草稿对照仍可恢复 | preview.3 真实 desktop 未在所查 localStorage 文件找到合成草稿探针；旧版曾留下明文 | 新版本再验证；不能据此断言旧数据库字节被擦除 |
 | M03 | 无痕选择 TXT，发送并由工具读取；临时目录隔离，删除后清理 | preview.5 和 preview.10 真实 desktop 有记录 | 新版本回归，检查普通对照 |
 | M04 | 选择 PNG 并由模型读取；无痕图片不进入普通附件目录 | preview.6 真实 desktop 有记录 | 新版本回归 |
-| M05 | 从资源管理器复制 PNG 文件并粘贴，发送后模型读取 | preview.6 真实 desktop 有记录 | 其他截图应用的剪贴板格式未覆盖 |
+| M05 | 从资源管理器复制 PNG 文件并粘贴，发送后模型读取 | preview.6 有记录；2026-11-10，preview.13 真实 desktop 粘贴合成 PNG，模型读出图片中的探针文字；同一无痕会话粘贴 TXT 后模型读出内容，两个附件对象的哈希与原文件一致 | 其他截图应用的剪贴板格式、删除后的清理仍待验证 |
 | M06 | 拖入 PNG，模型读取；检查普通附件目录及删除后的临时目录 | preview.8 真实 desktop 有记录 | 新版本回归 |
 | M07 | 同图用于普通和两个无痕会话；删除一个无痕会话后其他会话仍可预览 | preview.8 真实 desktop 有记录 | 新版本回归；不要删除仍被普通会话引用的对象 |
 | M08 | 后台任务延迟读取附件，运行中删除会话；任务仍需要文件时不得提前清理 | preview.10 真实 desktop 用约 50ms 采样观察到进程和文件从同时存在变为同时不存在 | 采样不能证明严格先后；自动测试 A18 已用事件顺序覆盖任务结束前后与失败路径；真实桌面并发读写、删除时序仍需验证 |
 | M09 | 无痕附件存在时异常退出，再启动并检查残留清理 | preview.6 真实 desktop 强制退出后重启，旧进程目录移除 | 未覆盖活跃的脱离型子进程；不能证明其已停止 |
 | M10 | 检查实际模型请求，区分正常消息与额外会话日志；普通会话作对照 | 2026-11-07：本机 DSH 的真实日志提供者和注册表隔离验证，修改前无痕字段含合成探针；修改后无痕字段为空、普通对照仍含探针。隔离 DSH 加载新包后 `sessionLog: ok`。2026-11-09：隔离 DSH_HOME + 本地 Messages 模拟端，走真实 host 请求组装和 HTTP 发送链路；普通请求带字段且含探针，无痕请求不带字段但 messages/system 仍在；普通对照缺字段时脚本判失败。见下方「M10 隔离请求链路验证」 | **未验证**真实桌面及真实服务商的网络链路；子会话路径改由 preview.11 的子 agent 拒绝保护覆盖（M11），本验证未实测真实子会话和真实接受水位。此验证使用隔离 profile 和模拟接收端 |
-| M11 | 检查脱离生产者 Promise 的进程或跨会话子 agent 仍使用附件时的删除、崩溃和重启行为；并验证无痕父会话不能启动子 agent | 2026-11-09 静态检查：本机 DSH 默认给子 agent 普通 UUID；候选版在启动入口和持久化入口增加拒绝保护，隔离服务报告 `subagentGuard: ok`，单元测试通过。同日隔离真实服务验证：无痕父会话 `startActivation` 被拒且 sessions 无新增文件，直接 `persistence.create` 被拒；普通父会话同一入口成功创建子会话并落盘，`parentSession` 正确；连续 3 次 PASS。见下方「M11 隔离子 Agent 服务验证」 | 本验证只覆盖 in-process `spawn` 的 `startActivation` 服务入口，未走模型调用 `subagent` 工具的参数解析/预设路径；外部 provider（ACP 等）及子进程、真实 desktop 和附件生命周期仍未覆盖 |
+| M11 | 检查脱离生产者 Promise 的进程或跨会话子 agent 仍使用附件时的删除、崩溃和重启行为；并验证无痕父会话不能启动子 agent | 隔离服务入口、合成外部 provider 启动边界及模型调用工具入口均有普通和无痕对照；模型工具入口另有去掉插件的反向对照。详见下方各项记录 | 真实 ACP/SDK provider、真实 desktop 子 agent 路径及脱离管理的外部进程仍需验证；独立读取进程在宿主崩溃重启后可能丢失附件 |
 | M12 | 自检失败时无痕开关不可用并提示；普通功能不受影响 | 2026-11-10 隔离 web UI：preview.11 仅在悬浮属性显示故障提示；preview.13 安装包正常/故障对照通过，原因可见且关联禁用开关，普通会话收到本地模拟回复 | 真实桌面故障界面待验 |
 | M13 | 会话关闭时有延迟写入，确认完成关闭和清理后目录不会重新出现；清理失败要如实提示，普通会话不受影响 | 2026-11-09：自动测试中，受控附件延迟写入完成后才清理，清理后新操作被拒绝；目标异常时清理报错；延迟会话事件不会恢复内存或写入普通日志。另一个无痕附件与普通日志对照正常。灵感来自 [dsh-incognito 延迟清理实现](https://github.com/HuiHuitie-zhu/dsh-incognito/blob/main/lib/index.js) | **部分验证**：尚未覆盖真实 DSH 桌面、用户界面错误提示、脱离受控生命周期的外部进程及直接重建目录 |
 | M14 | 候选安装包在隔离 DSH_HOME 用官方 plugin CLI 安装并启动，自检 status 各子系统为 ok | 2026-11-09：`artifacts/dsh-incognito-chat-0.1.0-preview.11.tgz` 装入 `work/candidate-preview11-final/home`；`node scripts/check-isolated-status.mjs --home work/candidate-preview11-final/home` 输出 `ready=true`，persistence/projectionCache/sessionLog/subagentGuard/attachments 全 `ok`；真实 desktop 未安装 | 真实 desktop 安装、重启和桌面回归仍未做 |
