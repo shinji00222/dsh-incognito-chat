@@ -30,6 +30,14 @@ npm pack --pack-destination artifacts
 
 ## 当前候选记录
 
+- 版本：`0.1.0-preview.12`（2026-11-10 本地候选）
+- 产物：`artifacts/dsh-incognito-chat-0.1.0-preview.12.tgz`，27,946 字节，SHA-256 `b278fd7c0a0ba98dbbbc5301c6641526e62c22da111cb959feeb3604ada97b00`
+- 安装包验证：官方 CLI 安装到全新隔离 web profile，实际加载 `preview.12`；自检 `ready=true`，各保护项均为 `ok`
+- 同版本源代码验证：`npm test` 76/76；M10 正向与反向对照、M11 普通与无痕的本地及外部服务入口对照均通过
+- 桌面现状：本机仍使用 `preview.11`。`preview.12` 的桌面回归、tag 和发布待办
+
+## preview.11 候选记录
+
 - 版本：`0.1.0-preview.11`（候选，未发布；2026-11-10 已安装到本机 desktop）
 - tag：`v0.1.0-preview.11`（指向候选提交 bffb3cd；已推送）
 - 推送：`main` 与 tag 已推送到 origin（2026-11-09）
