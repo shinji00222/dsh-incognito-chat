@@ -1,0 +1,4 @@
+# Mounts the synthetic M11 model-tool-call probe. Only used in an isolated DSH_HOME.
+- insert:
+    - id: subagent-tool-call-probe
+      name: 'dsh-subagent-tool-call-probe'
