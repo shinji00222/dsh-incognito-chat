@@ -58,6 +58,33 @@ export function apply(ctx) {
           const agents = child.get('agents')
           const subagents = child.get('subagents')
           const persistence = child.get('sessionPersistence') ?? ctx.get('sessionPersistence')
+          const externalName = 'm11-external-probe'
+          const externalReached = 'M11_EXTERNAL_START_REACHED'
+          let externalStarts = 0
+          // A provider without prepareContinuable takes DSH's external branch.
+          // Stop at the provider boundary before executing any external command.
+          subagents.registerProvider({
+            name: externalName,
+            capabilities: {},
+            start() {
+              externalStarts++
+              throw new Error(externalReached)
+            },
+          })
+          const probeExternalStart = async parent => {
+            try {
+              await subagents.startActivation({
+                provider: externalName,
+                label: 'M11 synthetic external child',
+                request: { parent, cwd, prompt: [{ type: 'text', text: 'M11-SYNTHETIC-EXTERNAL-CHILD' }] },
+                signal: new AbortController().signal,
+                delivery: 'caller',
+              })
+              return null
+            } catch (error) {
+              return String(error?.message ?? error)
+            }
+          }
           const create = async (sessionId) => {
             for (let attempt = 0; attempt < 40; attempt += 1) {
               try {
@@ -96,6 +123,8 @@ export function apply(ctx) {
             incognitoError = String(error?.message ?? error)
             incognitoRejected = incognitoError.includes('无痕对话暂不支持启动子 agent')
           }
+          const incognitoExternalError = await probeExternalStart(incognito.agent)
+          const incognitoExternalStarts = externalStarts
           const incognitoFileChanges = await observeSessionChanges(sessionsRoot, beforeSnapshot)
           const afterIncognito = listSessionFiles(sessionsRoot)
           const incognitoUnexpectedSessionFiles = afterIncognito
@@ -158,6 +187,7 @@ export function apply(ctx) {
           const normalChildSessionFiles = normalChildId === null
             ? []
             : afterNormal.filter(file => !afterPersistence.includes(file) && file.includes(normalChildId))
+          const normalExternalError = await probeExternalStart(normal.agent)
 
           const result = {
             ok: true,
@@ -170,6 +200,10 @@ export function apply(ctx) {
             incognitoNewSessionFiles: afterIncognito.filter(file => !before.includes(file)),
             incognitoUnexpectedSessionFiles,
             incognitoFileChanges,
+            incognitoExternalError,
+            incognitoExternalStarts,
+            normalExternalError,
+            normalExternalStarts: externalStarts - incognitoExternalStarts,
             persistenceRejected,
             persistenceError,
             sessionFilesAfterPersistence: afterPersistence.length,

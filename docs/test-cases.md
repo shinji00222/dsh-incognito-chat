@@ -74,6 +74,7 @@ A14 验证的是现有父进程判断逻辑，不证明已退出的 DSH 没有�
 - M12：在另一套隔离临时根中，用合成普通文件占据附件根目录的位置。真实状态接口报告 `ready=false`、`attachments=failed`，`persistence`、`sessionLog`、`subagentGuard` 均为 `ok`。此项覆盖后端故障状态，桌面按钮和提示仍待验。
 - M09/M11 受管理任务对照：在隔离 DSH 中给无痕会话加载标准预设，通过真实 `jobs.start` 和 `shell.execute` 启动后台 PowerShell。用文件信号确认它读取了插件进程目录中的合成附件后，再强退 DSH 宿主。附件当时还在，PowerShell 在重启前已退出。重启后旧目录清理成功，任务进程仍未运行。本次覆盖 Windows 默认 `workspace-write` 下的受管理 PowerShell；模型工具入口、其他沙箱模式、外部 provider 和真正脱离管理的进程未覆盖。
 - M09/M11 受管理子进程对照：在 Windows 上运行 `node scripts/verify-managed-crash.mjs`。探针由受管理 PowerShell 再启动一个 PowerShell 子进程，等待子进程读到合成附件后强退宿主，检查两级进程均在重启前退出，并在重启后检查旧附件目录已移除。隔离实测通过。该命令在项目 `work/` 下创建独立的配置、工作区和临时目录。
+- M11 外部 provider 启动边界：`node scripts/verify-subagent-guard.mjs` 额外注册一个只有 `start` 的合成 provider，走真实 DSH 的外部分支。无痕请求在 provider 启动前被拦截，启动回调调用数为 0；普通对照到达回调 1 次，以预定错误标记结束。无痕测试窗口内会话文件仍为 0 → 0。该探针只验证启动边界，未启动真实 ACP/SDK provider，未覆盖模型工具入口或附件传递。
 - 同次复跑 `npm test` 75/75，M10 正向请求对照和 M11 进程内子 Agent 服务对照通过。
 
 ### M10 隔离请求链路验证（2026-11-09）

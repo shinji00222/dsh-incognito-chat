@@ -226,6 +226,12 @@ function assertResult(result) {
     error('PERSISTENCE_WROTE_SESSION', `direct child create wrote unexpected session files: ${JSON.stringify(result.persistenceUnexpectedSessionFiles)}`)
   }
   if (!Array.isArray(result.incognitoFileChanges) || result.incognitoFileChanges.length !== 0) error('INCOGNITO_FILE_CHANGES', 'session files changed after rejected activation')
+  if (!String(result.incognitoExternalError).includes('无痕对话暂不支持启动子 agent') || result.incognitoExternalStarts !== 0) {
+    error('INCOGNITO_EXTERNAL_START', 'incognito request was not rejected before the external provider start boundary')
+  }
+  if (result.normalExternalStarts !== 1 || result.normalExternalError !== 'M11_EXTERNAL_START_REACHED') {
+    error('NORMAL_EXTERNAL_CONTROL', `normal request did not reach the external provider exactly once: ${result.normalExternalError}`)
+  }
   if (!Array.isArray(result.persistenceFileChanges) || result.persistenceFileChanges.length !== 0) error('PERSISTENCE_FILE_CHANGES', 'session files changed after rejected persistence')
   if (!result.normalChildId) error('NORMAL_CHILD_NOT_CREATED', `normal parent could not start a child: ${result.normalError ?? 'no child id'}`)
   if (result.normalError) error('NORMAL_CHILD_ERROR', String(result.normalError))
@@ -287,6 +293,10 @@ async function main() {
     sessionFilesAfterPersistence: done.sessionFilesAfterPersistence,
     persistenceUnexpectedSessionFiles: done.persistenceUnexpectedSessionFiles,
     incognitoFileChanges: done.incognitoFileChanges,
+    incognitoExternalError: done.incognitoExternalError,
+    incognitoExternalStarts: done.incognitoExternalStarts,
+    normalExternalError: done.normalExternalError,
+    normalExternalStarts: done.normalExternalStarts,
     persistenceFileChanges: done.persistenceFileChanges,
     normalChildId: done.normalChildId,
     normalError: done.normalError,
@@ -301,6 +311,7 @@ async function main() {
   writeFile(path.join(runDir, 'result.json'), JSON.stringify(summary, null, 2) + '\n')
   console.log(`M11 isolated subagent guard verification: ${runDir}`)
   console.log(`incognito activation rejected: ${summary.incognitoRejected} (${summary.incognitoError ?? ''})`)
+  console.log(`external provider start calls: incognito=${summary.incognitoExternalStarts}, normal=${summary.normalExternalStarts}`)
   console.log(`session files before/after incognito: ${summary.sessionFilesBefore}/${summary.sessionFilesAfterIncognito}`)
   console.log(`direct persistence rejected: ${summary.persistenceRejected} (${summary.persistenceError ?? ''})`)
   console.log(`normal child: ${summary.normalChildId ?? 'MISSING'} live=${summary.normalLive} parent=${summary.normalParentSession} persisted=${summary.normalPersisted}`)
