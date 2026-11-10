@@ -33,7 +33,8 @@ npm pack --pack-destination artifacts
 - 版本：`0.1.0-preview.14`（2026-11-10 本地候选）
 - 产物：`artifacts/dsh-incognito-chat-0.1.0-preview.14.tgz`，28,438 字节，SHA-256 `d8052e00632f9a4dace26a6a0cc11f3ec54c55dc560989af5b4cb267c3064124`
 - 安装包验证：官方 CLI 安装至两份隔离 web profile。正常启动各保护项为 `ok`；附件根被普通文件占用时 `attachments=failed`、`ready=false`。直接加载隔离安装的包，附件生命周期 6 项通过，包含清理故障消除后的重试
-- 源码验证：82 项自动测试通过。真实桌面目前安装 `preview.13`，新版桌面验收待完成
+- 源码验证：82 项自动测试通过
+- 桌面验收：经确认安装 `preview.14` 并重启。真实桌面可开启无痕，一次粘贴合成 TXT 和 PNG 后模型正确读出两个探针。临时附件目录匹配两个源文件的 SHA-256，普通附件目录的 49 个文件中无匹配。删除清理与拖放待验
 
 ## preview.13 候选记录
 
