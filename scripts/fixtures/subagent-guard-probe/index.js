@@ -8,6 +8,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { snapshotSessionFiles, observeSessionChanges } from './snapshot.js'
 
 export const name = 'subagent-guard-probe'
 
@@ -72,11 +73,11 @@ export function apply(ctx) {
             throw new Error(`could not create agent ${sessionId}`)
           }
 
-          const normal = await create(normalId)
           const incognito = await create(incognitoId)
           await sleep(300)
 
           const before = listSessionFiles(sessionsRoot)
+          const beforeSnapshot = snapshotSessionFiles(sessionsRoot)
           let incognitoRejected = false
           let incognitoError = null
           try {
@@ -95,15 +96,12 @@ export function apply(ctx) {
             incognitoError = String(error?.message ?? error)
             incognitoRejected = incognitoError.includes('无痕对话暂不支持启动子 agent')
           }
-          await sleep(300)
+          const incognitoFileChanges = await observeSessionChanges(sessionsRoot, beforeSnapshot)
           const afterIncognito = listSessionFiles(sessionsRoot)
-          // The normal parent's own session file may materialize asynchronously
-          // (checkpoint flush); it contains normalId. Anything else would be a
-          // child session written before the guard rejected the attempt.
           const incognitoUnexpectedSessionFiles = afterIncognito
             .filter(file => !before.includes(file))
-            .filter(file => !file.includes(normalId))
 
+          const persistenceSnapshot = snapshotSessionFiles(sessionsRoot)
           let persistenceRejected = false
           let persistenceError = null
           try {
@@ -117,11 +115,12 @@ export function apply(ctx) {
             persistenceError = String(error?.message ?? error)
             persistenceRejected = persistenceError.includes('无痕对话暂不支持创建子会话')
           }
+          const persistenceFileChanges = await observeSessionChanges(sessionsRoot, persistenceSnapshot)
           const afterPersistence = listSessionFiles(sessionsRoot)
           const persistenceUnexpectedSessionFiles = afterPersistence
             .filter(file => !afterIncognito.includes(file))
-            .filter(file => !file.includes(normalId))
 
+          const normal = await create(normalId)
           let normalChildId = null
           let normalError = null
           let normalLive = false
@@ -170,10 +169,12 @@ export function apply(ctx) {
             sessionFilesAfterIncognito: afterIncognito.length,
             incognitoNewSessionFiles: afterIncognito.filter(file => !before.includes(file)),
             incognitoUnexpectedSessionFiles,
+            incognitoFileChanges,
             persistenceRejected,
             persistenceError,
             sessionFilesAfterPersistence: afterPersistence.length,
             persistenceUnexpectedSessionFiles,
+            persistenceFileChanges,
             normalChildId,
             normalError,
             normalLive,

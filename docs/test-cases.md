@@ -90,6 +90,8 @@ node scripts/verify-session-log-request.mjs --negative-control
 - 未覆盖：真实 desktop profile、真实 DeepSeek 服务端（模拟端固定 200 和合成 SSE，不验证接受水位、重试、代理和网络故障）、真实桌面 UI（本验证不经过新建对话页、开关和客户端会话创建）、session title 等辅助模型请求（隔离 profile 关闭了 `session-title-llm`）、附件/工具调用、子 agent 路径（preview.11 已在子 agent 启动和子会话创建入口拒绝，但真实桌面路径未实测）。
 - 该脚本依赖本机 DSH 桌面运行时和本机回环 HTTP，不放进 `npm test`；`npm test` 只跑纯判定单元测试。
 
+2026-11-10 复核：隔离脚本拒绝已有或越界运行目录；先执行无痕验证，再创建普通对照。每次拒绝后对 sessions 文件内容哈希进行约 1.5 秒、50 毫秒间隔观察，检查新增、修改和删除；复跑结果无痕阶段 0 → 0，普通子会话仍创建并落盘。`tests/subagent-verification.test.mjs` 覆盖既有文件修改、延迟新增及目录保护。观察无法排除采样间的短暂变化、观察期后的写入或未检查的其他目录。
+
 ### M11 隔离子 Agent 服务验证（2026-11-09）
 
 目的：验证 `subagent-guard.js` 和 `persistence.js` 的拒绝发生在子会话写入或 provider 启动之前，并确认普通父会话同一入口不被误伤。

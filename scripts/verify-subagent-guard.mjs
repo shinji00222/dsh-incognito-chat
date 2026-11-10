@@ -34,12 +34,23 @@ const SYNTHETIC_API_KEY = 'sk-m11-synthetic-not-a-real-key'
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function createRunDir() {
+  const work = path.join(root, 'work')
+  fs.mkdirSync(work, { recursive: true })
+  const realWork = fs.realpathSync(work)
+  if (realWork.toLowerCase() !== path.join(fs.realpathSync(root), 'work').toLowerCase()) throw new Error('work must not redirect to another directory')
   const explicit = option('--run-dir')
-  if (explicit) return path.resolve(root, explicit)
+  if (argv.includes('--run-dir') && (!explicit || explicit.startsWith('--'))) throw new Error('--run-dir requires a new directory under work')
+  if (explicit) {
+    const candidate = path.resolve(root, explicit)
+    if (path.dirname(candidate).toLowerCase() !== path.resolve(work).toLowerCase()) throw new Error('--run-dir must be a direct child of work')
+    const target = path.join(realWork, path.basename(candidate))
+    fs.mkdirSync(target)
+    return target
+  }
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
   for (let attempt = 0; ; attempt += 1) {
-    const candidate = path.join(root, 'work', `subagent-guard-${stamp}${attempt === 0 ? '' : `-${attempt}`}`)
-    if (!fs.existsSync(candidate)) return candidate
+    const candidate = path.join(realWork, `subagent-guard-${stamp}${attempt === 0 ? '' : `-${attempt}`}`)
+    try { fs.mkdirSync(candidate); return candidate } catch (error) { if (error.code !== 'EEXIST') throw error }
   }
 }
 
@@ -214,6 +225,8 @@ function assertResult(result) {
   if (!Array.isArray(result.persistenceUnexpectedSessionFiles) || result.persistenceUnexpectedSessionFiles.length !== 0) {
     error('PERSISTENCE_WROTE_SESSION', `direct child create wrote unexpected session files: ${JSON.stringify(result.persistenceUnexpectedSessionFiles)}`)
   }
+  if (!Array.isArray(result.incognitoFileChanges) || result.incognitoFileChanges.length !== 0) error('INCOGNITO_FILE_CHANGES', 'session files changed after rejected activation')
+  if (!Array.isArray(result.persistenceFileChanges) || result.persistenceFileChanges.length !== 0) error('PERSISTENCE_FILE_CHANGES', 'session files changed after rejected persistence')
   if (!result.normalChildId) error('NORMAL_CHILD_NOT_CREATED', `normal parent could not start a child: ${result.normalError ?? 'no child id'}`)
   if (result.normalError) error('NORMAL_CHILD_ERROR', String(result.normalError))
   if (result.normalParentSession !== result.normalId) error('NORMAL_CHILD_WRONG_PARENT', `normal child parentSession=${result.normalParentSession}`)
@@ -226,7 +239,6 @@ function assertResult(result) {
 
 async function main() {
   const runDir = createRunDir()
-  fs.mkdirSync(runDir, { recursive: true })
   const nonce = randomUUID().slice(0, 8)
   const normalId = `session-${randomUUID()}`
   const incognitoId = `session-incognito-${randomUUID()}`
@@ -274,6 +286,8 @@ async function main() {
     persistenceError: done.persistenceError,
     sessionFilesAfterPersistence: done.sessionFilesAfterPersistence,
     persistenceUnexpectedSessionFiles: done.persistenceUnexpectedSessionFiles,
+    incognitoFileChanges: done.incognitoFileChanges,
+    persistenceFileChanges: done.persistenceFileChanges,
     normalChildId: done.normalChildId,
     normalError: done.normalError,
     normalLive: done.normalLive,
