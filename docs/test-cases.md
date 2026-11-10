@@ -111,6 +111,7 @@ node scripts/verify-session-log-request.mjs --negative-control
 
 - 覆盖：host 侧真实会话创建与消息入队（`agents.create` + `followup`）、`deepseekLlmApiExtensions.prepare` 的真实字段合并、真实 `POST /v1/messages` HTTP 发送（到本地模拟端）、普通和无痕的同轮对照、普通对照缺失时的失败保护。
 - 2026-11-10，preview.13 源码追加两种隔离回归。运行 `node scripts/verify-session-log-request.mjs --title`，普通和无痕各捕获一条对话请求和一条标题请求。运行同一脚本加 `--retry`，本地端点给普通和无痕各返回一次 HTTP 503，随后各捕获一次重试。两种验证中，普通请求均携带包含探针的 `dsh_session_log`，无痕请求均省略该字段，四次运行（含基线和反向对照）均达到各自预期。
+- 2026-11-10 稳定版准备复跑：81 项自动测试通过；标题请求、503 重试和子 agent 守卫隔离对照均通过。子 agent 合成外部 provider 的启动次数为无痕 0、普通 1。
 - 仍待验证真实 desktop UI、真实 DeepSeek 服务端的接受水位、代理及其他网络故障，以及附件与工具调用对请求的影响。
 - 该脚本依赖本机 DSH 桌面运行时和本机回环 HTTP，不放进 `npm test`；`npm test` 只跑纯判定单元测试。
 
