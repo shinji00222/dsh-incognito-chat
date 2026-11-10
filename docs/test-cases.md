@@ -110,7 +110,8 @@ node scripts/verify-session-log-request.mjs --negative-control
 覆盖与未覆盖：
 
 - 覆盖：host 侧真实会话创建与消息入队（`agents.create` + `followup`）、`deepseekLlmApiExtensions.prepare` 的真实字段合并、真实 `POST /v1/messages` HTTP 发送（到本地模拟端）、普通和无痕的同轮对照、普通对照缺失时的失败保护。
-- 未覆盖：真实 desktop profile、真实 DeepSeek 服务端（模拟端固定 200 和合成 SSE，不验证接受水位、重试、代理和网络故障）、真实桌面 UI（本验证不经过新建对话页、开关和客户端会话创建）、session title 等辅助模型请求（隔离 profile 关闭了 `session-title-llm`）、附件/工具调用、子 agent 路径（preview.11 已在子 agent 启动和子会话创建入口拒绝，但真实桌面路径未实测）。
+- 2026-11-10，preview.13 源码追加两种隔离回归。运行 `node scripts/verify-session-log-request.mjs --title`，普通和无痕各捕获一条对话请求和一条标题请求。运行同一脚本加 `--retry`，本地端点给普通和无痕各返回一次 HTTP 503，随后各捕获一次重试。两种验证中，普通请求均携带包含探针的 `dsh_session_log`，无痕请求均省略该字段，四次运行（含基线和反向对照）均达到各自预期。
+- 仍待验证真实 desktop UI、真实 DeepSeek 服务端的接受水位、代理及其他网络故障，以及附件与工具调用对请求的影响。
 - 该脚本依赖本机 DSH 桌面运行时和本机回环 HTTP，不放进 `npm test`；`npm test` 只跑纯判定单元测试。
 
 2026-11-10 复核：隔离脚本拒绝已有或越界运行目录；先执行无痕验证，再创建普通对照。每次拒绝后对 sessions 文件内容哈希进行约 1.5 秒、50 毫秒间隔观察，检查新增、修改和删除；复跑结果无痕阶段 0 → 0，普通子会话仍创建并落盘。`tests/subagent-verification.test.mjs` 覆盖既有文件修改、延迟新增及目录保护。观察无法排除采样间的短暂变化、观察期后的写入或未检查的其他目录。

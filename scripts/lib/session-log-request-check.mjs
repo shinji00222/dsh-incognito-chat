@@ -23,10 +23,10 @@ export function recordCapturedRequest(captures, raw, body, normalProbe, incognit
   return slot
 }
 
-export function checkCaptureCounts(captures) {
+export function checkCaptureCounts(captures, expected = 1) {
   const findings = []
   for (const slot of ['normal', 'incognito']) {
-    if (captures[slot].length !== 1) findings.push({ severity: 'error', code: 'REQUEST_COUNT', message: `${slot} 请求数为 ${captures[slot].length}，预期恰好为 1` })
+    if (captures[slot].length !== expected) findings.push({ severity: 'error', code: 'REQUEST_COUNT', message: `${slot} 请求数为 ${captures[slot].length}，预期恰好为 ${expected}` })
   }
   if (captures.unclassified !== 0) findings.push({ severity: 'error', code: 'UNCLASSIFIED_REQUEST', message: `存在 ${captures.unclassified} 个无法唯一归属的请求` })
   return findings

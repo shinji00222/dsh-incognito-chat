@@ -20,6 +20,7 @@ export function apply(ctx) {
   const normalProbe = process.env.M10_NORMAL_PROBE
   const incognitoProbe = process.env.M10_INCOGNITO_PROBE
   const cwd = process.env.M10_WORKSPACE
+  const waitForSecond = process.env.M10_SECOND_REQUEST === '1'
   const ids = new Set([normalId, incognitoId].filter(Boolean))
 
   const note = (label, value) => {
@@ -103,9 +104,9 @@ export function apply(ctx) {
           const agents = child.get('agents')
           if (!agents?.create) throw new Error('agents.create unavailable')
           await createAgent(agents, normalId, normalProbe)
-          await waitForFile(path.join(dir, 'requests', 'normal.json'), 30000)
+          await waitForFile(path.join(dir, 'requests', waitForSecond ? 'normal-second.json' : 'normal.json'), 30000)
           await createAgent(agents, incognitoId, incognitoProbe)
-          await waitForFile(path.join(dir, 'requests', 'incognito.json'), 30000)
+          await waitForFile(path.join(dir, 'requests', waitForSecond ? 'incognito-second.json' : 'incognito.json'), 30000)
           done({ ok: true, normalId, incognitoId })
         } catch (error) {
           fail(error)

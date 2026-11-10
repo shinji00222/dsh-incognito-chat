@@ -15,6 +15,8 @@
 // 用法：
 //   node scripts/verify-session-log-request.mjs
 //   node scripts/verify-session-log-request.mjs --negative-control
+//   node scripts/verify-session-log-request.mjs --title
+//   node scripts/verify-session-log-request.mjs --retry
 //   node scripts/verify-session-log-request.mjs --run-dir work/session-log-request-xxx
 import fs from 'node:fs'
 import http from 'node:http'
@@ -34,6 +36,8 @@ const option = (name, fallback) => {
 }
 
 const NEGATIVE_CONTROL = flag('--negative-control')
+const TITLE = flag('--title')
+const RETRY = flag('--retry')
 const TIMEOUT_MS = Number(option('--timeout-ms', '90000'))
 const DESKTOP_EXE = process.env.DSH_DESKTOP_EXE
   ?? path.join(process.env.LOCALAPPDATA ?? '', 'Programs/DeepSeek Harness/DeepSeek Harness.exe')
@@ -107,14 +111,20 @@ function buildIsolatedProfile({ runDir, disableSessionLog, baseURL }) {
 
   const patch = [
     '# Isolated M10 verification profile. Never applied to the real desktop profile.',
-    '- id: session-title-llm',
-    '  disabled: true',
+    ...TITLE ? [] : ['- id: session-title-llm', '  disabled: true'],
     '- id: session-telemetry-otel',
     '  disabled: true',
     '- id: llm-deepseek',
     '  config:',
     `    baseURL: ${JSON.stringify(baseURL)}`,
     '    apiKeyEnv: DEEPSEEK_API_KEY',
+    ...RETRY ? [
+      '    retryPolicy:',
+      '      mode: normal',
+      '      maxRetries: 1',
+      '      retryableCodes: [SERVER]',
+      '      backoff: { initialDelayMs: 50, maxDelayMs: 50, jitterRatio: 0 }',
+    ] : [],
     ...disableSessionLog
       ? ['- id: session-log-deepseek', '  disabled: true']
       : [],
@@ -165,6 +175,14 @@ function startMockServer({ runDir, normalProbe, incognitoProbe }) {
       const slot = recordCapturedRequest(captures, raw, body, normalProbe, incognitoProbe)
       if (slot !== null && captures[slot].length === 1) {
         writeFile(path.join(requestsDir, `${slot}.json`), JSON.stringify(body, null, 2))
+      }
+      if (slot !== null && captures[slot].length === 2) {
+        writeFile(path.join(requestsDir, `${slot}-second.json`), JSON.stringify(body, null, 2))
+      }
+      if (RETRY && slot !== null && captures[slot].length === 1) {
+        response.writeHead(503, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ error: { type: 'overloaded_error', message: 'synthetic overload' } }))
+        return
       }
       const sse = respond()
       response.writeHead(200, {
@@ -219,6 +237,7 @@ function spawnDsh({ runDir, home, workspace, port, baseURL }) {
     M10_INCOGNITO_ID: process.env.M10_INCOGNITO_ID,
     M10_NORMAL_PROBE: process.env.M10_NORMAL_PROBE,
     M10_INCOGNITO_PROBE: process.env.M10_INCOGNITO_PROBE,
+    M10_SECOND_REQUEST: TITLE || RETRY ? '1' : '',
   })
   const child = spawn(DESKTOP_EXE, ['--expose-internals', cli, 'web', '--no-open', '--port', String(port)], {
     cwd: workspace,
@@ -319,13 +338,23 @@ async function runHarness({ disableSessionLog }) {
     redactIsolatedCredentials(home)
   }
 
-  const normalBody = mock.captures.normal[0] ?? null
-  const incognitoBody = mock.captures.incognito[0] ?? null
+  const isTitle = (body) => JSON.stringify(body?.messages ?? []).includes('Generate the session title from this JSON array of human messages:')
+  const normalBody = mock.captures.normal.find((body) => !isTitle(body)) ?? null
+  const incognitoBody = mock.captures.incognito.find((body) => !isTitle(body)) ?? null
   const result = checkCapturedRequests({ normalBody, incognitoBody, normalProbe, incognitoProbe })
-  result.findings.push(...checkCaptureCounts(mock.captures))
+  result.findings.push(...checkCaptureCounts(mock.captures, TITLE || RETRY ? 2 : 1))
+  if (TITLE || RETRY) {
+    const normalSecond = TITLE ? mock.captures.normal.find(isTitle) : mock.captures.normal[1]
+    const incognitoSecond = TITLE ? mock.captures.incognito.find(isTitle) : mock.captures.incognito[1]
+    result.findings.push(...checkCapturedRequests({
+      normalBody: normalSecond, incognitoBody: incognitoSecond, normalProbe, incognitoProbe,
+    }).findings)
+  }
   result.ok = result.findings.every(entry => entry.severity !== 'error')
   const summary = {
     negativeControl: disableSessionLog,
+    title: TITLE,
+    retry: RETRY,
     runDir,
     normalSessionId: normalId,
     incognitoSessionId: incognitoId,
@@ -353,6 +382,9 @@ async function runHarness({ disableSessionLog }) {
 }
 
 async function main() {
+  if ([TITLE, RETRY, NEGATIVE_CONTROL].filter(Boolean).length > 1) {
+    throw new Error('choose at most one of --title, --retry or --negative-control')
+  }
   if (NEGATIVE_CONTROL) {
     const { runDir, result } = await runHarness({ disableSessionLog: true })
     const rejected = !result.ok && result.findings.some((entry) => entry.code === 'CONTROL_MISSING_FIELD')
