@@ -34,6 +34,8 @@ npm pack --pack-destination artifacts
 - 产物：`artifacts/dsh-incognito-chat-0.1.0-preview.12.tgz`，27,946 字节，SHA-256 `b278fd7c0a0ba98dbbbc5301c6641526e62c22da111cb959feeb3604ada97b00`
 - 安装包验证：官方 CLI 安装到全新隔离 web profile，实际加载 `preview.12`；自检 `ready=true`，各保护项均为 `ok`
 - 同版本源代码验证：`npm test` 76/76；M10 正向与反向对照、M11 普通与无痕的本地及外部服务入口对照均通过
+- 安装包追加实测：锁定旧附件时启动仍为 `ready=true` 并报告延期清理，释放锁后重启成功删除旧目录
+- 打包后新增 M12 界面提示修复，隔离 web 源码复验通过，需使用新版本号打包
 - 桌面现状：本机仍使用 `preview.11`。`preview.12` 的桌面回归、tag 和发布待办
 
 ## preview.11 候选记录

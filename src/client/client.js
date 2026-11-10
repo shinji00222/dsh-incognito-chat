@@ -148,6 +148,8 @@
     '.dsh-incog-menu-delete:hover{background:var(--dsw-alias-interactive-bg-hover,#8882)}',
     '.dsh-incog-badge{display:inline-flex;align-items:center;gap:4px;padding:0 4px 0 8px;height:22px;border-radius:11px;',
     'background:#7c5cff26;color:#b9a8ff;font-size:12px;white-space:nowrap}',
+    '.dsh-incog-control{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0}',
+    '.dsh-incog-status{font-size:12px;line-height:1.4}',
   ].join('')
 
   function injectStyle() {
@@ -239,13 +241,25 @@
           var status = { ready: false, checked: false, reason: '正在检查…' }
           var listeners = new Set()
           function setStatus(next) { status = next; listeners.forEach(function (fn) { fn(status) }) }
+          function readinessReason(s) {
+            if (!draftGuard.ready()) return '无法保护无痕草稿'
+            if (!fileGuard.ready) return '无法保护桌面附件'
+            if (s.ready) return ''
+            if (s.attachments === 'failed') return '无痕附件初始化失败，请检查 DSH 日志'
+            if (s.attachments !== 'ok') return '无痕附件保护服务尚不可用'
+            if (s.persistence !== 'ok') return '无痕会话存储保护不可用'
+            if (s.sessionLog === 'failed') return '无痕会话日志保护不可用'
+            if (s.subagentGuard === 'failed') return '无痕子会话保护不可用'
+            return '无痕保护未通过检查，请检查 DSH 日志'
+          }
           rpc('status').then(function (s) {
             // 启动时清掉已经不存在的无痕会话留下的 key（上次没正常关闭的）
             var live = s.liveIds || []
             cleanBrowserTraces(function (id) { return live.indexOf(id) >= 0 })
-            setStatus({ ready: !!s.ready && draftGuard.ready() && fileGuard.ready, attachments: s.attachments, checked: true, reason: !draftGuard.ready() ? '无法保护无痕草稿' : !fileGuard.ready ? '无法保护桌面文件' : s.ready ? '' : '当前 DSH 版本不支持无痕：' + (s.errors || []).join('；') })
-          }, function (e) {
-            setStatus({ ready: false, checked: true, reason: '无痕插件的 host 端没有加载：' + e.message })
+            var reason = readinessReason(s)
+            setStatus({ ready: !reason, attachments: s.attachments, checked: true, reason: reason })
+          }, function () {
+            setStatus({ ready: false, checked: true, reason: '无法连接无痕保护服务，请检查 DSH 日志' })
           })
           function useStatus() {
             var pair = React.useState(status)
@@ -275,6 +289,7 @@
           }
 
           async function enterIncognito(fromSessionId) {
+            if (!status.ready) throw new Error(status.reason)
             if (!draftGuard.ready()) throw new Error('无法保护无痕草稿')
             var workspaceId = workspaceIdOf(fromSessionId)
             if (!workspaceId) throw new Error('找不到当前会话所在的工作区')
@@ -311,12 +326,15 @@
             var error = React.useState('')
             var on = isIncognito(sessionId)
             var disabled = busy[0] || (!on && !s.ready)
+            var reason = !on && s.checked && !s.ready ? s.reason : ''
+            var reasonId = React.useId()
             var title = error[0] || (!on && !s.ready ? s.reason
               : on ? '关闭无痕，回到普通对话' : s.attachments === 'ok' ? '对话保存在内存；附件暂存磁盘，删除时清理' : '对话保存在内存；附件未受保护，可能写入普通附件目录')
-            return h('button', {
+            var button = h('button', {
               type: 'button',
               className: 'dsh-incog-toggle',
               'aria-pressed': on,
+              'aria-describedby': reason ? reasonId : undefined,
               disabled: disabled,
               title: title,
               onClick: function () {
@@ -328,6 +346,8 @@
                   .finally(function () { busy[1](false) })
               },
             }, h(Glasses), on ? '无痕中' : '无痕')
+            return h('span', { className: 'dsh-incog-control' }, button,
+              reason && h('span', { className: 'dsh-incog-status', id: reasonId, role: 'status' }, reason))
           }
 
           // ── 会话顶部：无痕标识 + 删除按钮 ─────────────────────────────

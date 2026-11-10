@@ -52,7 +52,7 @@ A14 验证的是现有父进程判断逻辑，不证明已退出的 DSH 没有�
 | M09 | 无痕附件存在时异常退出，再启动并检查残留清理 | preview.6 真实 desktop 强制退出后重启，旧进程目录移除 | 未覆盖活跃的脱离型子进程；不能证明其已停止 |
 | M10 | 检查实际模型请求，区分正常消息与额外会话日志；普通会话作对照 | 2026-11-07：本机 DSH 的真实日志提供者和注册表隔离验证，修改前无痕字段含合成探针；修改后无痕字段为空、普通对照仍含探针。隔离 DSH 加载新包后 `sessionLog: ok`。2026-11-09：隔离 DSH_HOME + 本地 Messages 模拟端，走真实 host 请求组装和 HTTP 发送链路；普通请求带字段且含探针，无痕请求不带字段但 messages/system 仍在；普通对照缺字段时脚本判失败。见下方「M10 隔离请求链路验证」 | **未验证**真实桌面及真实服务商的网络链路；子会话路径改由 preview.11 的子 agent 拒绝保护覆盖（M11），本验证未实测真实子会话和真实接受水位。此验证使用隔离 profile 和模拟接收端 |
 | M11 | 检查脱离生产者 Promise 的进程或跨会话子 agent 仍使用附件时的删除、崩溃和重启行为；并验证无痕父会话不能启动子 agent | 2026-11-09 静态检查：本机 DSH 默认给子 agent 普通 UUID；候选版在启动入口和持久化入口增加拒绝保护，隔离服务报告 `subagentGuard: ok`，单元测试通过。同日隔离真实服务验证：无痕父会话 `startActivation` 被拒且 sessions 无新增文件，直接 `persistence.create` 被拒；普通父会话同一入口成功创建子会话并落盘，`parentSession` 正确；连续 3 次 PASS。见下方「M11 隔离子 Agent 服务验证」 | 本验证只覆盖 in-process `spawn` 的 `startActivation` 服务入口，未走模型调用 `subagent` 工具的参数解析/预设路径；外部 provider（ACP 等）及子进程、真实 desktop 和附件生命周期仍未覆盖 |
-| M12 | 自检失败时无痕开关不可用并提示；普通功能不受影响 | 有接口缺失的自动测试，未找到完整真实桌面验收记录 | 桌面端故障注入验收 |
+| M12 | 自检失败时无痕开关不可用并提示；普通功能不受影响 | 2026-11-10 隔离 web UI：preview.11 禁用开关且普通会话正常，但提示只在悬浮属性。修复后的源码复测通过，可见原因与禁用开关关联，普通会话收到本地模拟回复 | 修复尚未收入已打包的 preview.12；真实桌面故障界面待验 |
 | M13 | 会话关闭时有延迟写入，确认完成关闭和清理后目录不会重新出现；清理失败要如实提示，普通会话不受影响 | 2026-11-09：自动测试中，受控附件延迟写入完成后才清理，清理后新操作被拒绝；目标异常时清理报错；延迟会话事件不会恢复内存或写入普通日志。另一个无痕附件与普通日志对照正常。灵感来自 [dsh-incognito 延迟清理实现](https://github.com/HuiHuitie-zhu/dsh-incognito/blob/main/lib/index.js) | **部分验证**：尚未覆盖真实 DSH 桌面、用户界面错误提示、脱离受控生命周期的外部进程及直接重建目录 |
 | M14 | 候选安装包在隔离 DSH_HOME 用官方 plugin CLI 安装并启动，自检 status 各子系统为 ok | 2026-11-09：`artifacts/dsh-incognito-chat-0.1.0-preview.11.tgz` 装入 `work/candidate-preview11-final/home`；`node scripts/check-isolated-status.mjs --home work/candidate-preview11-final/home` 输出 `ready=true`，persistence/projectionCache/sessionLog/subagentGuard/attachments 全 `ok`；真实 desktop 未安装 | 真实 desktop 安装、重启和桌面回归仍未做 |
 
@@ -77,6 +77,7 @@ A14 验证的是现有父进程判断逻辑，不证明已退出的 DSH 没有�
 - M11 外部 provider 启动边界：`node scripts/verify-subagent-guard.mjs` 额外注册一个只有 `start` 的合成 provider，走真实 DSH 的外部分支。无痕请求在 provider 启动前被拦截，启动回调调用数为 0；普通对照到达回调 1 次，以预定错误标记结束。无痕测试窗口内会话文件仍为 0 → 0。该探针只验证启动边界，未启动真实 ACP/SDK provider，未覆盖模型工具入口或附件传递。
 - M09 锁定旧附件：隔离强退后由独立 PowerShell 独占打开合成附件。修复前，重启报告 `attachments=failed`、`ready=false`；修复后，同一条件下报告 `attachments=ok`、`ready=true`，并记录延后清理警告。释放文件后再次重启，旧目录成功清除。Windows 回归用例同时验证其他可清理的旧目录不受阻。
 - M09/M11 追加对照：`node scripts/verify-managed-crash.mjs` 和 `node scripts/verify-managed-crash.mjs --full-access` 分别断言实际解析出的 Shell 模式为 `workspace-write` 和 `danger-full-access`。本机两种模式均实测到后台 PowerShell 及其后代在重启前退出，旧附件目录在重启后消失。安装版的普通 Windows 子进程在 Job runner 不可用时仍有较弱的回退路径，本机两组结果不覆盖该回退、ConPTY 或进程树之外的读取者。
+- M12 界面复验：在两套隔离 DSH web 环境测试正常和附件目录被占用。正常开关可进入无痕；故障开关禁用，页面显示「无痕附件初始化失败，请检查 DSH 日志」，通过 `aria-describedby` 关联开关，前端没有展示异常路径。故障环境中普通会话仍收到本地模拟回复，前后 `liveSessions=0`。REA 故障页面证据 `ev_911f5778d20fef5d81cf704f7b926bccc34095917120a7250d5bbc5c31f75d8c`；普通回复与正常开关由 Playwright 单独复测。
 - 同次复跑 `npm test` 75/75，M10 正向请求对照和 M11 进程内子 Agent 服务对照通过。
 
 ### M10 隔离请求链路验证（2026-11-09）
