@@ -76,6 +76,7 @@ A14 验证的是现有父进程判断逻辑，不证明已退出的 DSH 没有�
 - M09/M11 受管理子进程对照：在 Windows 上运行 `node scripts/verify-managed-crash.mjs`。探针由受管理 PowerShell 再启动一个 PowerShell 子进程，等待子进程读到合成附件后强退宿主，检查两级进程均在重启前退出，并在重启后检查旧附件目录已移除。隔离实测通过。该命令在项目 `work/` 下创建独立的配置、工作区和临时目录。
 - M11 外部 provider 启动边界：`node scripts/verify-subagent-guard.mjs` 额外注册一个只有 `start` 的合成 provider，走真实 DSH 的外部分支。无痕请求在 provider 启动前被拦截，启动回调调用数为 0；普通对照到达回调 1 次，以预定错误标记结束。无痕测试窗口内会话文件仍为 0 → 0。该探针只验证启动边界，未启动真实 ACP/SDK provider，未覆盖模型工具入口或附件传递。
 - M09 锁定旧附件：隔离强退后由独立 PowerShell 独占打开合成附件。修复前，重启报告 `attachments=failed`、`ready=false`；修复后，同一条件下报告 `attachments=ok`、`ready=true`，并记录延后清理警告。释放文件后再次重启，旧目录成功清除。Windows 回归用例同时验证其他可清理的旧目录不受阻。
+- M09/M11 追加对照：`node scripts/verify-managed-crash.mjs` 和 `node scripts/verify-managed-crash.mjs --full-access` 分别断言实际解析出的 Shell 模式为 `workspace-write` 和 `danger-full-access`。本机两种模式均实测到后台 PowerShell 及其后代在重启前退出，旧附件目录在重启后消失。安装版的普通 Windows 子进程在 Job runner 不可用时仍有较弱的回退路径，本机两组结果不覆盖该回退、ConPTY 或进程树之外的读取者。
 - 同次复跑 `npm test` 75/75，M10 正向请求对照和 M11 进程内子 Agent 服务对照通过。
 
 ### M10 隔离请求链路验证（2026-11-09）

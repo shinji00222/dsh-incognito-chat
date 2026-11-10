@@ -10,6 +10,8 @@ import { setTimeout as delay } from 'node:timers/promises'
 // Windows-only isolated integration probe. It force-stops only the DSH processes it starts.
 const scripts = path.dirname(fileURLToPath(import.meta.url))
 const project = path.dirname(scripts)
+const args = process.argv.slice(2)
+assert.ok(args.length === 0 || (args.length === 1 && args[0] === '--full-access'), 'usage: node scripts/verify-managed-crash.mjs [--full-access]')
 const work = path.join(project, 'work')
 await fs.mkdir(work, { recursive: true })
 const realWork = await fs.realpath(work)
@@ -41,6 +43,7 @@ await fs.writeFile(path.join(fixture, 'cordis.patch.yml'), "- insert:\n    - id:
 const exe = process.env.DSH_DESKTOP_EXE ?? path.join(process.env.LOCALAPPDATA, 'Programs/DeepSeek Harness/DeepSeek Harness.exe')
 const cli = path.join(path.dirname(exe), 'resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js')
 const childEnv = { ...process.env, ELECTRON_RUN_AS_NODE: '1', DSH_HOME: home, DSH_MANAGED_CRASH_DIR: workspace, TEMP: temp, TMP: temp, DSH_TELEMETRY_DISABLED: '1', DSH_TELEMETRY_MODE: 'OFF' }
+childEnv.DSH_MANAGED_CRASH_MODE = args.length ? 'danger-full-access' : 'workspace-write'
 for (const key of ['DSH_PROFILE','DSH_PROFILE_DIR','DSH_SESSION_ID','DSH_SHELL','DSH_WEB_URL','DEEPSEEK_API_KEY']) delete childEnv[key]
 const root = path.join(temp, 'dsh-incognito-chat-attachments-v1')
 const children = new Set()
@@ -113,6 +116,7 @@ try {
   const shellPid = await readPid('shell.pid')
   const workerPid = await readPid('worker.pid')
   assert.notEqual(shellPid, workerPid)
+  assert.equal(await fs.readFile(path.join(workspace, 'shell-mode.txt'), 'utf8'), childEnv.DSH_MANAGED_CRASH_MODE)
   await waitFile('heartbeat.txt', value => value === 'P11-MANAGED-CRASH-SYNTHETIC')
   function alive(pid) {
     try { process.kill(pid, 0); return true }
@@ -128,7 +132,7 @@ try {
   await assert.rejects(fs.access(session), { code: 'ENOENT' })
   assert.equal(alive(shellPid), false)
   assert.equal(alive(workerPid), false)
-  console.log('PASS: shell and descendant exited before restart; stale attachment directory was cleaned on startup')
+  console.log(`PASS (${childEnv.DSH_MANAGED_CRASH_MODE}): shell and descendant exited before restart; stale attachment directory was cleaned on startup`)
 } finally {
   for (const child of children) await stop(child)
   await redactLocalGrant()

@@ -34,7 +34,15 @@ export function apply(ctx) {
           meta: { cwd: dir, agentPreset: 'standard' },
           setup: async agentCtx => { await child.agentPresets.mount(agentCtx, 'standard') },
         })
-        const spec = child.shell.resolve({ command, workdir: dir, onExpiry: 'none' })
+        const spec = child.shell.resolve({
+          command,
+          workdir: dir,
+          onExpiry: 'none',
+          ...(process.env.DSH_MANAGED_CRASH_MODE === 'danger-full-access'
+            ? { sandboxPolicy: { mode: 'danger-full-access' } }
+            : {}),
+        })
+        fs.writeFileSync(path.join(dir, 'shell-mode.txt'), spec.sandboxPolicy?.mode ?? 'unknown')
         child.jobs.start({
           kind: 'pwsh',
           label: 'Synthetic managed crash probe',
