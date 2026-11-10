@@ -30,6 +30,13 @@ npm pack --pack-destination artifacts
 
 ## 当前候选记录
 
+- 版本：`0.1.0-preview.14`（2026-11-10 本地候选）
+- 产物：`artifacts/dsh-incognito-chat-0.1.0-preview.14.tgz`，28,438 字节，SHA-256 `d8052e00632f9a4dace26a6a0cc11f3ec54c55dc560989af5b4cb267c3064124`
+- 安装包验证：官方 CLI 安装至两份隔离 web profile。正常启动各保护项为 `ok`；附件根被普通文件占用时 `attachments=failed`、`ready=false`。直接加载隔离安装的包，附件生命周期 6 项通过，包含清理故障消除后的重试
+- 源码验证：82 项自动测试通过。真实桌面目前安装 `preview.13`，新版桌面验收待完成
+
+## preview.13 候选记录
+
 - 版本：`0.1.0-preview.13`（2026-11-10 本地候选）
 - 产物：`artifacts/dsh-incognito-chat-0.1.0-preview.13.tgz`，28,346 字节，SHA-256 `e8a5efdb5d428b9b2e3c626c828a1b78112b9646d0ac4e905c4c5040d48ed290`
 - 安装包验证：官方 CLI 分别安装到正常及故障的隔离 web profile，均核对实际版本为 `preview.13`。正常可开启无痕；附件根故障时禁用开关并显示原因，1440 和 768 像素宽度均可见，普通会话仍收到本地模拟回复
